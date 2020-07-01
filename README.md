@@ -9,6 +9,8 @@ You can control the tub using the subscribed topics, f.e. "Spa/light" with messa
 
 Maybe you need to adjust the sketch to your tub configuration (number of pumps, connection of blower, nr of lights...). You may find the DEBUG comments useful for this task.
 
+Bonus: you may add several relays or such like I did ;-)
+
 Enjoy.
 
 # TODO
