@@ -1,3 +1,6 @@
+Based on the great work over at https://github.com/ccutrer/balboa_worldwide_app/wiki, https://github.com/ccutrer/balboa_worldwide_app/blob/master/doc/protocol.md
+
+
 # esp8266_spa
 Control for a Balboa BP2100G0 spa controller using the esp8266
 
