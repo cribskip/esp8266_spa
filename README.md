@@ -16,5 +16,31 @@ Bonus: you may add several relays or such like I did ;-)
 
 Enjoy.
 
+# Getting started
+- Make sure your Spa is using a Balboa controller
+- This is known to work on and developed on a BP2100G0 controller. Yours may be compatible.
+- Get the parts
+- Flash the esp8266 fom the Arduino IDE
+- Connect everything together
+- Hook up on the Spa
+- Enjoy and get tubbin' ;-)
+
+# Parts
+- Get a esp8266, perferable a Wemos D1 Pro in case you need to attach a seperate antenna.
+- RS485 bus transceiver, a MAX485 breakout board is sufficient
+- A DC-DC converter for powering from the Tub (MT3608 for example)
+- Some wire
+
+# Hardware connections
+![Example](https://github.com/cribskip/esp8266_spa/blob/master/esp8266_spa.jpg)
+- Look up finding the right wires on https://github.com/ccutrer/balboa_worldwide_app/wiki#physical-layer
+- Connect the DC-DC converter to the supply wires (+ and Ground) from the Tub
+- Connect the RS485 transceiver to the A and B wires
+- Connect the esp8266-TX to the rS485 transceiver on pin DI
+- Connect the esp8266-RX to the rS485 transceiver on pin RO
+- Connect the esp8266-D1 to the rS485 transceiver on both pins RE and DE.
+
 # TODO
 - Add more documentation
+- Add fault reporting
+- Add more setting possibilities (filter cycles, preferences maybe)
