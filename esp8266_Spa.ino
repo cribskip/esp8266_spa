@@ -1,17 +1,18 @@
-// Based on the priceless work from:
-// https://github.com/ccutrer/balboa_worldwide_app/wiki
 // https://github.com/ccutrer/balboa_worldwide_app/blob/master/doc/protocol.md
+// Reference: https://github.com/ccutrer/balboa_worldwide_app/wiki
 
-// Best practice: keep a documentation of your wire colors :-)
+// Please install the needed dependencies:
+// CircularBuffer
+// PubSubClient
+
 // +12V RED
 // GND  BLACK
 // A    YELLOW
 // B    WHITE
 
-// Adopt to your values
-#define WIFI_SSID "HEREYOURSSID"
-#define WIFI_PASSWORD "HEREYOURWIFIPASSWD"
-#define BROKER "IPOFMQTTBROKER"
+#define WIFI_SSID "YOURSSID"
+#define WIFI_PASSWORD "YOURWIFIPASS"
+#define BROKER "YOURBROKERIP"
 
 #define TX485 D1
 #define RLY1  D7
@@ -41,6 +42,8 @@ uint8_t send = 0x00;
 uint8_t settemp = 0x00;
 uint8_t id = 0x00;
 
+unsigned long lastrx = 0;
+
 struct {
   uint8_t jet1 : 1;
   uint8_t jet2 : 1;
@@ -64,6 +67,11 @@ void print_msg(CircularBuffer<uint8_t, 35> &data) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+void hardreset() {
+  ESP.wdtDisable();
+  while (1) {};
+}
 
 void _yield() {
   yield();
@@ -92,16 +100,7 @@ void reconnect() {
       mqtt.subscribe("Spa/relay/#");
 
       last_state_crc = 0x00;
-    } /*
-    else {
-      // Wait about 5 seconds (10 x 500ms) before retrying
-      for (int x = 0; x < 500; x++) {
-        delay(10);
-        httpServer.handleClient();
-        _yield();
-      }
     }
-*/
   }
 }
 
@@ -137,7 +136,7 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
       digitalWrite(RLY2, newstate);
     }
   } else if (topic.equals("Spa/command")) {
-    if (payload.equals("reset")) ESP.restart();
+    if (payload.equals("reset")) hardreset();
   } else if (topic.equals("Spa/heatmode")) {
     if (payload.equals("ON") && SpaState.restmode == 1) send = 0x51;
     else if (payload.equals("OFF") && SpaState.restmode == 0) send = 0x51;
@@ -172,28 +171,36 @@ void setup() {
   pinMode(TX485, OUTPUT);
   digitalWrite(TX485, LOW);
 
-  ESP.wdtDisable();
-  ESP.wdtEnable(2000);
-
-  // Spa communication, 115.200 baud 8N1
-  Serial.begin(115200);
-  Serial.println();
-  Serial.println(F("OpenSpa"));
-  Serial.println(F("Serial"));
-  Serial.setDebugOutput(false);
-
   pinMode(RLY1, OUTPUT);
   digitalWrite(RLY1, HIGH);
   pinMode(RLY2, OUTPUT);
   digitalWrite(RLY2, HIGH);
 
+  // Spa communication, 115.200 baud 8N1
+  Serial.begin(115200);
+
+  // give Spa time to wake up after POST
+  for (uint8_t i = 0; i < 5; i++) {
+    delay(1000);
+    yield();
+  }
+
   Q_in.clear();
   Q_out.clear();
 
-  WiFi.setOutputPower(20.5); // this sets wifi to highest power
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(300);
+  {
+    WiFi.setOutputPower(20.5); // this sets wifi to highest power
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    unsigned long timeout = millis() + 10000;
+
+    while (WiFi.status() != WL_CONNECTED && millis() < timeout) {
+      yield();
+    }
+
+    // Reset because of no connection
+    if (WiFi.status() != WL_CONNECTED) {
+      hardreset();
+    }
   }
 
   httpUpdater.setup(&httpServer, "admin", "");
@@ -201,15 +208,8 @@ void setup() {
   MDNS.begin("Spa");
   MDNS.addService("http", "tcp", 80);
 
-  Serial.println(F("WiFi"));
-
   mqtt.setServer(BROKER, 1883);
   mqtt.setCallback(callback);
-
-  Serial.println(F("OpenSpa READY"));
-  ESP.wdtDisable();
-  Serial.flush();
-  ESP.wdtEnable(2000);
 }
 
 void loop() {
@@ -225,6 +225,7 @@ void loop() {
 
     // Drop until SOF is seen
     if (Q_in.first() != 0x7E) Q_in.clear();
+    lastrx = millis();
   }
 
   // DEBUG: mqtt.publish("Spa/rcv", String(x).c_str()); _yield();
@@ -292,8 +293,13 @@ void loop() {
         mqtt.publish("Spa/state/target", String(d, 2).c_str());
 
         // 7: Actual temperature
-        d = Q_in[7] / 2;
-        //if (Q_in[7] % 2 == 1) d += 0.5;
+        if (Q_in[7] != 0xFF) {
+          d = Q_in[7] / 2;
+          if (Q_in[7] % 2 == 1) d += 0.5;
+
+        } else {
+          d = 0;
+        }
         mqtt.publish("Spa/state/temperature", String(d, 2).c_str());
 
         // 8: Hour & 9: Minute => Time
@@ -305,21 +311,17 @@ void loop() {
 
         // 10: Flags_2
         switch (Q_in[10]) {
-          case 0: mqtt.publish("Spa/state/heatingmode", "Ready");
+          case 0: mqtt.publish("Spa/state/heatingmode", "ON");
+          case 3:
             SpaState.restmode = 0;
             break;
-          case 1: mqtt.publish("Spa/state/heatingmode", "Rest");
-            SpaState.restmode = 0;
-            break;
-          case 3: mqtt.publish("Spa/state/heatingmode", "Ready in Rest");
+          case 1: mqtt.publish("Spa/state/heatingmode", "OFF");
+            SpaState.restmode = 1;
             break;
         }
 
         // 15: Heat status
-        if (Q_in[15] && 0x30 > 0)
-          mqtt.publish("Spa/state/heatstate", "ON");
-        else
-          mqtt.publish("Spa/state/heatstate", "OFF");
+        mqtt.publish("Spa/state/heatstate", String(Q_in[15]).c_str());
 
         // 16: Pump status
         if (bitRead(Q_in[16], 1) == 1) {
@@ -380,5 +382,10 @@ void loop() {
     // Clean up queue
     _yield();
     Q_in.clear();
+  }
+
+  // Long time no receive
+  if (millis() - lastrx > 5000) {
+    hardreset();
   }
 }
