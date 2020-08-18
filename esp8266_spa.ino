@@ -14,6 +14,9 @@
 #define WIFI_PASSWORD "YOURWIFIPASS"
 #define BROKER "YOURBROKERIP"
 
+#define STRON String("ON").c_str()
+#define STROFF String("OFF").c_str()
+
 #define TX485 D1
 #define RLY1  D7
 #define RLY2  D8
@@ -278,7 +281,7 @@ void loop() {
     }
 
     // Normal package handling
-    // FF AF 13: Status Update
+    // FF AF 13: Status Update - Packet index offset 5
     if (Q_in[2] == 0xFF && Q_in[4] == 0x13) {
       if (last_state_crc != Q_in[Q_in[1]]) {
         String s;
@@ -309,56 +312,58 @@ void loop() {
         s += String(Q_in[9]);
         mqtt.publish("Spa/state/time", s.c_str());
 
-        // 10: Flags_2
+        // 10: Heating Mode
         switch (Q_in[10]) {
-          case 0: mqtt.publish("Spa/state/heatingmode", "ON");
+          case 0: mqtt.publish("Spa/state/heatingmode", STRON);
           case 3:
             SpaState.restmode = 0;
             break;
-          case 1: mqtt.publish("Spa/state/heatingmode", "OFF");
+          case 1: mqtt.publish("Spa/state/heatingmode", STROFF);
             SpaState.restmode = 1;
             break;
         }
 
-        // 15: Heat status
-        mqtt.publish("Spa/state/heatstate", String(Q_in[15]).c_str());
+        // 15: Flags Byte 10 / Heat status
+        d = Q_in[15] >> 4;
+        if (d == 0) mqtt.publish("Spa/state/heatstate", STROFF);
+        else if (d == 1) s = mqtt.publish("Spa/state/heatstate", STRON);
 
-        // 16: Pump status
+        // 16: Flags Byte 11
         if (bitRead(Q_in[16], 1) == 1) {
-          mqtt.publish("Spa/state/jets1", "ON");
+          mqtt.publish("Spa/state/jets1", STRON);
           SpaState.jet1 = 1;
         } else {
-          mqtt.publish("Spa/state/jets1", "OFF");
+          mqtt.publish("Spa/state/jets1", STROFF);
           SpaState.jet1 = 0;
         }
 
         if (bitRead(Q_in[16], 3) == 1) {
-          mqtt.publish("Spa/state/jets2", "ON");
+          mqtt.publish("Spa/state/jets2", STRON);
           SpaState.jet2 = 1;
         } else {
-          mqtt.publish("Spa/state/jets2", "OFF");
+          mqtt.publish("Spa/state/jets2", STROFF);
           SpaState.jet2 = 0;
         }
 
-        // 18: Flags_5 OK
+        // 18: Flags Byte 13
         if (bitRead(Q_in[18], 1) == 1)
-          mqtt.publish("Spa/state/circ", "ON");
+          mqtt.publish("Spa/state/circ", STRON);
         else
-          mqtt.publish("Spa/state/circ", "OFF");
+          mqtt.publish("Spa/state/circ", STROFF);
 
         if (bitRead(Q_in[18], 2) == 1) {
-          mqtt.publish("Spa/state/blower", "ON");
+          mqtt.publish("Spa/state/blower", STRON);
           SpaState.blower = 1;
         } else {
-          mqtt.publish("Spa/state/blower", "OFF");
+          mqtt.publish("Spa/state/blower", STROFF);
           SpaState.blower = 0;
         }
-        // 19: Light Flag OK
+        // 19: Flags Byte 14
         if (Q_in[19] == 0x03) {
-          mqtt.publish("Spa/state/light", "ON");
+          mqtt.publish("Spa/state/light", STRON);
           SpaState.light = 1;
         } else {
-          mqtt.publish("Spa/state/light", "OFF");
+          mqtt.publish("Spa/state/light", STROFF);
           SpaState.light = 0;
         }
 
