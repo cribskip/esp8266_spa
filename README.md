@@ -18,6 +18,9 @@ Bonus: you may add several relays or such like I did ;-)
 
 Enjoy.
 
+# Appetiser using OpenHab
+![Example](https://github.com/cribskip/esp8266_spa/blob/master/spa_openhab.png)
+
 # Getting started
 - Make sure your Spa is using a Balboa controller
 - This is known to work on and developed on a BP2100G0 controller. Yours may be compatible.
