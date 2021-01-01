@@ -96,15 +96,16 @@ void hardreset() {
 
 void reconnect() {
   int oldstate = mqtt.state();
+  boolean connection = false;
 
   // Loop until we're reconnected
   if (!mqtt.connected()) {
     // Attempt to connect
     if (BROKER_PASS == "") {
-      boolean connection = mqtt.connect(String(String("Spa") + String(millis())).c_str());
+      connection = mqtt.connect(String(String("Spa") + String(millis())).c_str());
     }
     else {
-      boolean connection = mqtt.connect("Spa1", BROKER_LOGIN, BROKER_PASS);
+      connection = mqtt.connect("Spa1", BROKER_LOGIN, BROKER_PASS);
     }
 
 
@@ -318,7 +319,8 @@ void loop() {
     if (Q_in[2] == 0xFF && Q_in[4] == 0x13) {
       if (last_state_crc != Q_in[Q_in[1]]) {
         String s;
-        double d;
+        double d = 0.0;
+        double c = 0.0;
 
         // DEBUG for finding meaning:
         //print_msg(Q_in);
@@ -332,7 +334,9 @@ void loop() {
         if (Q_in[7] != 0xFF) {
           d = Q_in[7] / 2;
           if (Q_in[7] % 2 == 1) d += 0.5;
+          if ((d > c * 1.2) || (d < c * 0.8)) d = c; //remove spurious readings greater or less than 20% away from previous read
           mqtt.publish("Spa/state/temperature", String(d, 2).c_str());
+          c = d;
         } else {
           d = 0;
         }
