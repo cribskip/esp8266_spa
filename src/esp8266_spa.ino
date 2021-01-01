@@ -42,6 +42,12 @@ ESP8266HTTPUpdateServer httpUpdater;
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
+extern uint8_t crc8();
+extern void ID_request();
+extern void ID_ack();
+extern void rs485_send();
+
+
 uint8_t x, i, j;
 
 uint8_t last_state_crc = 0x00;
@@ -61,6 +67,11 @@ struct {
   uint8_t padding : 2;
 } SpaState;
 
+void _yield() {
+  yield();
+  mqtt.loop();
+}
+
 void print_msg(CircularBuffer<uint8_t, 35> &data) {
   String s;
   //for (i = 0; i < (Q_in[1] + 2); i++) {
@@ -79,11 +90,6 @@ void print_msg(CircularBuffer<uint8_t, 35> &data) {
 void hardreset() {
   ESP.wdtDisable();
   while (1) {};
-}
-
-void _yield() {
-  yield();
-  mqtt.loop();
 }
 
 void reconnect() {
@@ -338,7 +344,7 @@ void loop() {
           case 1: mqtt.publish("Spa/state/heatingmode", STROFF);
             SpaState.restmode = 1;
             break;
-        }        
+        }
 
         // 15: Flags Byte 10 / Heat status, Temp Range
         d = bitRead(Q_in[15], 4);
