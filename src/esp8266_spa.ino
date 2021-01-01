@@ -17,11 +17,13 @@
 #define WIFI_SSID "YOURSSID"
 #define WIFI_PASSWORD ""
 #define BROKER ""
+#define BROKER_LOGIN ""
+#define BROKER_PASS ""
 
 #define STRON String("ON").c_str()
 #define STROFF String("OFF").c_str()
 
-#define TX485 D1
+//#define TX485 D1
 #define RLY1  D7
 #define RLY2  D8
 
@@ -98,7 +100,15 @@ void reconnect() {
   // Loop until we're reconnected
   if (!mqtt.connected()) {
     // Attempt to connect
-    if (mqtt.connect(String(String("Spa") + String(millis())).c_str())) { //, "Spa/node", 0, true, "OFF")) {
+    if (BROKER_PASS == "") {
+      boolean connection = mqtt.connect(String(String("Spa") + String(millis())).c_str());
+    }
+    else {
+      boolean connection = mqtt.connect("Spa1", BROKER_LOGIN, BROKER_PASS);
+    }
+
+
+    if (connection) { //, "Spa/node", 0, true, "OFF")) {
       mqtt.publish("Spa/node", "ON", true);
       mqtt.publish("Spa/debug", "RECONNECT");
       mqtt.publish("Spa/debug", String(millis()).c_str());
@@ -185,9 +195,9 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
 ///////////////////////////////////////////////////////////////////////////////
 
 void setup() {
-  // Begin RS485 in listening mode
-  pinMode(TX485, OUTPUT);
-  digitalWrite(TX485, LOW);
+  // Begin RS485 in listening mode -> no longer required with new RS485 chip
+  //pinMode(TX485, OUTPUT);
+  //digitalWrite(TX485, LOW);
 
   pinMode(RLY1, OUTPUT);
   digitalWrite(RLY1, HIGH);
