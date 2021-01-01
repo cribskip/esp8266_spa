@@ -59,7 +59,7 @@ void rs485_send() {
 
   Serial.flush();
 
-  digitalWrite(TX485, LOW);
+  //digitalWrite(TX485, LOW);
 
   // DEBUG: print_msg(Q_out);
   Q_out.clear();
