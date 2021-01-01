@@ -5,14 +5,18 @@
 // CircularBuffer
 // PubSubClient
 
+// TODO:
+// Implement Existing Client Request/Response
+// Handle non-CTS Client IDs
+
 // +12V RED
 // GND  BLACK
 // A    YELLOW
 // B    WHITE
 
 #define WIFI_SSID "YOURSSID"
-#define WIFI_PASSWORD "YOURWIFIPASS"
-#define BROKER "YOURBROKERIP"
+#define WIFI_PASSWORD ""
+#define BROKER ""
 
 #define STRON String("ON").c_str()
 #define STROFF String("OFF").c_str()
@@ -53,7 +57,8 @@ struct {
   uint8_t blower : 1;
   uint8_t light : 1;
   uint8_t restmode: 1;
-  uint8_t padding : 3;
+  uint8_t highrange: 1;
+  uint8_t padding : 2;
 } SpaState;
 
 void print_msg(CircularBuffer<uint8_t, 35> &data) {
@@ -97,6 +102,7 @@ void reconnect() {
       mqtt.subscribe("Spa/command");
       mqtt.subscribe("Spa/temperature");
       mqtt.subscribe("Spa/heatmode");
+      mqtt.subscribe("Spa/highrange");
       mqtt.subscribe("Spa/jets/#");
       mqtt.subscribe("Spa/blower");
       mqtt.subscribe("Spa/light");
@@ -158,6 +164,9 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
   } else if (topic.equals("Spa/blower")) {
     if (payload.equals("ON") && SpaState.blower == 0) send = 0x0C;
     else if (payload.equals("OFF") && SpaState.blower == 1) send = 0x0C;
+  } else if (topic.equals("Spa/highrange")) {
+    if (payload.equals("ON") && SpaState.highrange == 0) send = 0x50;
+    else if (payload.equals("OFF") && SpaState.highrange == 1) send = 0x50;
   } else if (topic.equals("Spa/temperature")) {
     // Get new set temperature
     double d = payload.toDouble();
@@ -213,6 +222,8 @@ void setup() {
 
   mqtt.setServer(BROKER, 1883);
   mqtt.setCallback(callback);
+  mqtt.setKeepAlive(10);
+  mqtt.setSocketTimeout(20);
 }
 
 void loop() {
@@ -248,6 +259,7 @@ void loop() {
       // FE BF 02: got new client ID
       if (Q_in[2] == 0xFE && Q_in[4] == 0x02) {
         id = Q_in[5];
+        if (id > 0x2F) id = 0x2F;
 
         ID_ack();
         mqtt.publish("Spa/id", String(id).c_str());
@@ -266,6 +278,11 @@ void loop() {
           Q_out.push(0xBF);
           Q_out.push(0x20);
           Q_out.push(settemp);
+        } else if (send == 0x00) {
+          // A Nothing to Send message is sent by a client immediately after a Clear to Send message if the client has no messages to send.
+          Q_out.push(id);
+          Q_out.push(0xBF);
+          Q_out.push(0x07);
         } else {
           // Send toggle commands
           Q_out.push(id);
@@ -299,11 +316,11 @@ void loop() {
         if (Q_in[7] != 0xFF) {
           d = Q_in[7] / 2;
           if (Q_in[7] % 2 == 1) d += 0.5;
-
+          mqtt.publish("Spa/state/temperature", String(d, 2).c_str());
         } else {
           d = 0;
         }
-        mqtt.publish("Spa/state/temperature", String(d, 2).c_str());
+        // REMARK Move upper publish to HERE to get 0 for unknown temperature
 
         // 8: Hour & 9: Minute => Time
         if (Q_in[8] < 10) s = "0"; else s = "";
@@ -321,12 +338,21 @@ void loop() {
           case 1: mqtt.publish("Spa/state/heatingmode", STROFF);
             SpaState.restmode = 1;
             break;
-        }
+        }        
 
-        // 15: Flags Byte 10 / Heat status
-        d = Q_in[15] >> 4;
+        // 15: Flags Byte 10 / Heat status, Temp Range
+        d = bitRead(Q_in[15], 4);
         if (d == 0) mqtt.publish("Spa/state/heatstate", STROFF);
-        else if (d == 1) s = mqtt.publish("Spa/state/heatstate", STRON);
+        else if (d == 1 || d == 2) mqtt.publish("Spa/state/heatstate", STRON);
+
+        d = bitRead(Q_in[15], 2);
+        if (d == 0) {
+          mqtt.publish("Spa/state/highrange", STROFF);
+          SpaState.highrange = 0;
+        } else if (d == 1) {
+          mqtt.publish("Spa/state/highrange", STRON);
+          SpaState.highrange = 1;
+        }
 
         // 16: Flags Byte 11
         if (bitRead(Q_in[16], 1) == 1) {
