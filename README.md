@@ -37,11 +37,14 @@ Bonus: you may add several relays or such like I did ;-)
 - Connect the RS485 transceiver to the A and B wires
 - Connect the esp8266-TX to the RS485 TX
 - Connect the esp8266-RX to the RS485 RX
-![Example] (https://github.com/EmmanuelLM/esp8266_spa/blob/master/PXL_20210101_104120166.jpg)
+
+![Example](https://github.com/EmmanuelLM/esp8266_spa/blob/master//PXL_20210101_104120166.jpg)
 
 # Debug
-- First, the RX (and to some extent the TX) LEDs of the RS485 transceiver (if using the one above) should light up as data goes through. If that is the case you know data is being converted from RS485 to TTL
+- First, check your voltages - the system is running at 3.3V
+- The RX (and to some extent the TX) LEDs of the RS485 transceiver (if using the one above) should light up as data goes through. If that is the case you know data is being converted from RS485 to TTL
 - The Wemos D1 Mini Pro should spit out data to the MQTT broker (MQTT Spy can be useful here to see: 1. that it is connected to the wifi; 2. that it is connected to the broker). If that is the case, you know the device can communicate over MQTT
+- Swap A and B - in my personal experience, if A & B are the wrong way round, the hot tub display (if you have one) will display (NO COMM) as the RS485 traffic get garbled by the esp8266_spa
 
 # Appetiser using OpenHab
 ![Example](https://github.com/cribskip/esp8266_spa/blob/master/spa_openhab.png)
