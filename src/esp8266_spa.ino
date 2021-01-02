@@ -168,7 +168,7 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
   } else if (topic.equals("Spa/command")) {
     if (payload.equals("reset")) hardreset();
   } else if (topic.equals("Spa/heatmode")) {
-    if (payload.equals("ON") && SpaState.restmode == 1) send = 0x51;
+    if (payload.equals("ON") && SpaState.restmode == 1) send = 0x51; // ON = Ready; OFF = Rest
     else if (payload.equals("OFF") && SpaState.restmode == 0) send = 0x51;
   } else if (topic.equals("Spa/light")) {
     if (payload.equals("ON") && SpaState.light == 0) send = 0x11;
@@ -186,7 +186,7 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
     if (payload.equals("ON") && SpaState.blower == 0) send = 0x0C;
     else if (payload.equals("OFF") && SpaState.blower == 1) send = 0x0C;
   } else if (topic.equals("Spa/highrange")) {
-    if (payload.equals("ON") && SpaState.highrange == 0) send = 0x50;
+    if (payload.equals("ON") && SpaState.highrange == 0) send = 0x50; //ON = High, OFF = Low
     else if (payload.equals("OFF") && SpaState.highrange == 1) send = 0x50;
   } else if (topic.equals("Spa/temperature")) {
     // Get new set temperature
@@ -329,12 +329,12 @@ void loop() {
         // DEBUG for finding meaning:
         //print_msg(Q_in);
 
-        // 25: Set Temperature
+        // 25: Flag Byte 20 - Set Temperature
         d = Q_in[25] / 2;
         if (Q_in[25] % 2 == 1) d += 0.5;
         mqtt.publish("Spa/state/target", String(d, 2).c_str());
 
-        // 7: Actual temperature
+        // 7: Flag Byte 2 - Actual temperature
         if (Q_in[7] != 0xFF) {
           d = Q_in[7] / 2;
           if (Q_in[7] % 2 == 1) d += 0.5;
@@ -349,20 +349,20 @@ void loop() {
         }
         // REMARK Move upper publish to HERE to get 0 for unknown temperature
 
-        // 8: Hour & 9: Minute => Time
+        // 8: Flag Byte 3 Hour & 9: Flag Byte 4 Minute => Time
         if (Q_in[8] < 10) s = "0"; else s = "";
         s = String(Q_in[8]) + ":";
         if (Q_in[9] < 10) s += "0";
         s += String(Q_in[9]);
         mqtt.publish("Spa/state/time", s.c_str());
 
-        // 10: Heating Mode
+        // 10: Flag Byte 5 - Heating Mode
         switch (Q_in[10]) {
-          case 0: mqtt.publish("Spa/state/heatingmode", STRON);
-          case 3:
+          case 0: mqtt.publish("Spa/state/heatingmode", STRON); //Ready
+          case 3: // Ready-in-Rest
             SpaState.restmode = 0;
             break;
-          case 1: mqtt.publish("Spa/state/heatingmode", STROFF);
+          case 1: mqtt.publish("Spa/state/heatingmode", STROFF); //Rest
             SpaState.restmode = 1;
             break;
         }
@@ -374,10 +374,10 @@ void loop() {
 
         d = bitRead(Q_in[15], 2);
         if (d == 0) {
-          mqtt.publish("Spa/state/highrange", STROFF);
+          mqtt.publish("Spa/state/highrange", STROFF); //LOW
           SpaState.highrange = 0;
         } else if (d == 1) {
-          mqtt.publish("Spa/state/highrange", STRON);
+          mqtt.publish("Spa/state/highrange", STRON); //HIGH
           SpaState.highrange = 1;
         }
 
