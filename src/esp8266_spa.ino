@@ -116,6 +116,8 @@ void reconnect() {
       mqtt.publish("Spa/debug", String(millis()).c_str());
       mqtt.publish("Spa/debug", String(oldstate).c_str());
       mqtt.publish("Spa/version", VERSION);
+      mqtt.publish("Spa/flashsize", String(ESP.getFlashChipRealSize()).c_str());
+      mqtt.publish("Spa/chipid", String(ESP.getChipId()).c_str());
 
       // ... and resubscribe
       mqtt.subscribe("Spa/command");
