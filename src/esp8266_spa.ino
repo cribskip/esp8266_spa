@@ -14,6 +14,7 @@
 // A    YELLOW
 // B    WHITE
 
+#define VERSION "0.1"
 #define WIFI_SSID "YOURSSID"
 #define WIFI_PASSWORD ""
 #define BROKER ""
@@ -114,6 +115,7 @@ void reconnect() {
       mqtt.publish("Spa/debug", "RECONNECT");
       mqtt.publish("Spa/debug", String(millis()).c_str());
       mqtt.publish("Spa/debug", String(oldstate).c_str());
+      mqtt.publish("Spa/version", VERSION);
 
       // ... and resubscribe
       mqtt.subscribe("Spa/command");
