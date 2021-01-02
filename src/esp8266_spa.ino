@@ -15,7 +15,7 @@
 // B    WHITE
 
 #define VERSION "0.1"
-#define WIFI_SSID "YOURSSID"
+#define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
 #define BROKER_LOGIN ""
@@ -336,7 +336,10 @@ void loop() {
         if (Q_in[7] != 0xFF) {
           d = Q_in[7] / 2;
           if (Q_in[7] % 2 == 1) d += 0.5;
-          if ((d > c * 1.2) || (d < c * 0.8)) d = c; //remove spurious readings greater or less than 20% away from previous read
+          if (c > 0) {
+            if ((d > c * 1.2) || (d < c * 0.8)) d = c; //remove spurious readings greater or less than 20% away from previous read
+          }
+
           mqtt.publish("Spa/state/temperature", String(d, 2).c_str());
           c = d;
         } else {
