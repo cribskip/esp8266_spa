@@ -6,7 +6,8 @@
 // PubSubClient
 
 // TODO:
-// HomeAssistant autodiscover
+// HomeAssistant autodiscover - mostly done
+// Configuration handling
 // Proper states (rather than just ON/OFF)
 // OTA update from Firebase
 // Settings
@@ -18,7 +19,7 @@
 // A    YELLOW
 // B    WHITE
 
-#define VERSION "0.2"
+#define VERSION "0.21"
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
@@ -122,30 +123,32 @@ void reconnect() {
       // ... Hassio autodiscover
     if (HASSIO) {
         //temperature
-        mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\", \"device_class\":\"temperature\", \"state_topic\":\"Spa/temperature/state\", \"unit_of_measurement\":\"°C\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/binary_sensor/Spa/status/config", "{\"name\":\"Hot tub status\", \"state_topic\":\"Spa/status\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\", \"name\": \"ESP Spa\", \"model\": \"ESP Spa 1\", \"sw_version\": \"0.21\", \"manufacturer\": \"DIY\"}}");
+        //temperature
+        mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\", \"device_class\":\"temperature\", \"state_topic\":\"Spa/temperature/state\", \"unit_of_measurement\":\"°C\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
         //target_temperature
         //mqtt.publish("homeassistant/switch/Spa/target_temp/config", "{\"name\":\"Hot tub target temperature\", \"command_topic\":\"Spa/target_temp/set\", \"state_topic\":\"Spa/target_temp/state\", \"unit_of_measurement\":\"°C\"}");
         //heat mode
-        mqtt.publish("homeassistant/switch/Spa/heatingmode/config", "{\"name\":\"Hot tub heating mode\", \"command_topic\":\"Spa/heatingmode/set\", \"state_topic\":\"Spa/heatingmode/state\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/switch/Spa/heatingmode/config", "{\"name\":\"Hot tub heating mode\", \"command_topic\":\"Spa/heatingmode/set\", \"state_topic\":\"Spa/heatingmode/state\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
         //high range
-        mqtt.publish("homeassistant/switch/Spa/highrange/config", "{\"name\":\"Hot tub high range\", \"command_topic\":\"Spa/highrange/set\", \"state_topic\":\"Spa/highrange/state\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/switch/Spa/highrange/config", "{\"name\":\"Hot tub high range\", \"command_topic\":\"Spa/highrange/set\", \"state_topic\":\"Spa/highrange/state\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
         //circulation pump
-        mqtt.publish("homeassistant/binary_sensor/Spa/circ/config", "{\"name\":\"Hot tub circulation pump\", \"device_class\":\"power\", \"state_topic\":\"Spa/circ/state\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/binary_sensor/Spa/circ/config", "{\"name\":\"Hot tub circulation pump\", \"device_class\":\"power\", \"state_topic\":\"Spa/circ/state\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
         //heating state
-        mqtt.publish("homeassistant/binary_sensor/Spa/heatstate/config", "{\"name\":\"Hot tub heating state\", \"state_topic\":\"Spa/heatstate/state\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/binary_sensor/Spa/heatstate/config", "{\"name\":\"Hot tub heating state\", \"state_topic\":\"Spa/heatstate/state\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
         //light 1
-        mqtt.publish("homeassistant/switch/Spa/light/config", "{\"name\":\"Hot tub light\", \"command_topic\":\"Spa/light/set\", \"state_topic\":\"Spa/light/state\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/switch/Spa/light/config", "{\"name\":\"Hot tub light\", \"command_topic\":\"Spa/light/set\", \"state_topic\":\"Spa/light/state\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
         //jets 1
-        mqtt.publish("homeassistant/switch/Spa/jet1/config", "{\"name\":\"Hot tub jet1\", \"command_topic\":\"Spa/jet1/set\", \"state_topic\":\"Spa/jet/1/state\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/switch/Spa/jet1/config", "{\"name\":\"Hot tub jet1\", \"command_topic\":\"Spa/jet1/set\", \"state_topic\":\"Spa/jet/1/state\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
         //jets 2
-        mqtt.publish("homeassistant/switch/Spa/jet2/config", "{\"name\":\"Hot tub jet2\", \"command_topic\":\"Spa/jet2/set\", \"state_topic\":\"Spa/jet/2/state\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/switch/Spa/jet2/config", "{\"name\":\"Hot tub jet2\", \"command_topic\":\"Spa/jet2/set\", \"state_topic\":\"Spa/jet/2/state\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
         //blower
-        mqtt.publish("homeassistant/switch/Spa/blower/config", "{\"name\":\"Hot tub blower\", \"command_topic\":\"Spa/blower/set\", \"state_topic\":\"Spa/blower/state\", \"platform\":\"mqtt\"}");
+        mqtt.publish("homeassistant/switch/Spa/blower/config", "{\"name\":\"Hot tub blower\", \"command_topic\":\"Spa/blower/set\", \"state_topic\":\"Spa/blower/state\", \"platform\":\"mqtt\", \"device:\"{ \"identifiers\": \"esp8266_spa\"}}");
 
     }
 
 
-      mqtt.publish("Spa/node/state", "ON", true);
+      mqtt.publish("Spa/status", "ON", true);
       mqtt.publish("Spa/node/debug", "RECONNECT");
       mqtt.publish("Spa/node/debug", String(millis()).c_str());
       mqtt.publish("Spa/node/debug", String(oldstate).c_str());
