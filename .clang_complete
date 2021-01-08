@@ -12,6 +12,7 @@
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/cores/esp8266
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/tools/sdk/lwip2/include
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/variants/d1_mini
+-I/home/emmanuelmoll/github/esp8266_spa/.pio/libdeps/d1_mini_pro/ArduinoJson/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/DNSServer/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/EEPROM
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266AVRISP/src
