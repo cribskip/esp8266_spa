@@ -51,7 +51,7 @@ Bonus: you may add several relays or such like I did ;-)
 
 # HomeAssistant integration
 The system uses HomeAssistant autodiscover and should just appear in the MQTT Integration under "Esp Spa"
-(https://github.com/cribskip/esp8266_spa/blob/master/Hassio.png)
+![Example](https://github.com/EmmanuelLM/esp8266_spa/blob/master//Hassio.png)
 
 # TODO
 - Add more documentation
