@@ -138,9 +138,9 @@ void reconnect() {
         //light 1
         mqtt.publish("homeassistant/switch/Spa/light/config", "{\"name\":\"Hot tub light\",\"unique_id\":\"ESP82Spa_7\",\"command_topic\":\"Spa/light/set\",\"state_topic\":\"Spa/light/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.21\"}}");
         //jets 1
-        mqtt.publish("homeassistant/switch/Spa/jet1/config", "{\"name\":\"Hot tub jet1\",\"unique_id\":\"ESP82Spa_8\",\"command_topic\":\"Spa/jet1/set\",\"state_topic\":\"Spa/jet/1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.21\"}}");
+        mqtt.publish("homeassistant/switch/Spa/jet/1/config", "{\"name\":\"Hot tub jet1\",\"unique_id\":\"ESP82Spa_8\",\"command_topic\":\"Spa/jet/1/set\",\"state_topic\":\"Spa/jet/1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.21\"}}");
         //jets 2
-        mqtt.publish("homeassistant/switch/Spa/jet2/config", "{\"name\":\"Hot tub jet2\",\"unique_id\":\"ESP82Spa_9\",\"command_topic\":\"Spa/jet2/set\",\"state_topic\":\"Spa/jet/2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.21\"}}");
+        mqtt.publish("homeassistant/switch/Spa/jet/2/config", "{\"name\":\"Hot tub jet2\",\"unique_id\":\"ESP82Spa_9\",\"command_topic\":\"Spa/jet/2/set\",\"state_topic\":\"Spa/jet/2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.21\"}}");
         //blower
         mqtt.publish("homeassistant/switch/Spa/blower/config", "{\"name\":\"Hot tub blower\",\"unique_id\":\"ESP82Spa_10\",\"command_topic\":\"Spa/blower/set\",\"state_topic\":\"Spa/blower/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.21\"}}");
 
