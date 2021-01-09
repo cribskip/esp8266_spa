@@ -46,8 +46,12 @@ Bonus: you may add several relays or such like I did ;-)
 - The Wemos D1 Mini Pro should spit out data to the MQTT broker (MQTT Spy can be useful here to see: 1. that it is connected to the wifi; 2. that it is connected to the broker). If that is the case, you know the device can communicate over MQTT
 - Swap A and B - in my personal experience, if A & B are the wrong way round, the hot tub display (if you have one) will display (NO COMM) as the RS485 traffic get garbled by the esp8266_spa
 
-# Appetiser using OpenHab
+# Appetiser using OpenHab...
 ![Example](https://github.com/cribskip/esp8266_spa/blob/master/spa_openhab.png)
+
+# HomeAssistant integration
+The system uses HomeAssistant autodiscover and should just appear in the MQTT Integration under "Esp Spa"
+(https://github.com/cribskip/esp8266_spa/blob/master/Hassio.png)
 
 # TODO
 - Add more documentation
