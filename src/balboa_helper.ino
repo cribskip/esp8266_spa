@@ -57,6 +57,8 @@ void rs485_send() {
   for (i = 0; i < Q_out.size(); i++)
     Serial.write(Q_out[i]);
 
+  //print_msg(Q_out);
+
   Serial.flush();
 
   //digitalWrite(TX485, LOW);

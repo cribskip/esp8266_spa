@@ -19,7 +19,7 @@
 // A    YELLOW
 // B    WHITE
 
-#define VERSION ""
+#define VERSION "0.24"
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
@@ -121,8 +121,15 @@ void reconnect() {
 
       // ... Hassio autodiscover
     if (HASSIO) {
+
+        //clear topics:
+        mqtt.publish("homeassistant/binary_sensor/Spa", "");
+        mqtt.publish("homeassistant/sensor/Spa", "");
+        mqtt.publish("homeassistant/switch/Spa", "");
+        mqtt.publish("/Spa", "");
+
         //temperature
-        mqtt.publish("homeassistant/binary_sensor/Spa/state/config", "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.21\"}}");
+        mqtt.publish("homeassistant/binary_sensor/Spa/state/config", "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.24\"}}");
         //temperature
         mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\",\"uniq_id\":\"ESP82Spa_2\",\"dev_cla\":\"temperature\",\"stat_t\":\"Spa/temperature/state\",\"unit_of_meas\":\"°C\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
         //target_temperature
@@ -138,9 +145,9 @@ void reconnect() {
         //light 1
         mqtt.publish("homeassistant/switch/Spa/light/config", "{\"name\":\"Hot tub light\",\"uniq_id\":\"ESP82Spa_7\",\"cmd_t\":\"Spa/light/set\",\"stat_t\":\"Spa/light/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
         //jets 1
-        mqtt.publish("homeassistant/switch/Spa/jet/1/config", "{\"name\":\"Hot tub jet1\",\"uniq_id\":\"ESP82Spa_8\",\"cmd_t\":\"Spa/jet/1/set\",\"stat_t\":\"Spa/jet/1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+        mqtt.publish("homeassistant/switch/Spa/jet_1/config", "{\"name\":\"Hot tub jet1\",\"uniq_id\":\"ESP82Spa_8\",\"cmd_t\":\"Spa/jet_1/set\",\"stat_t\":\"Spa/jet_1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
         //jets 2
-        mqtt.publish("homeassistant/switch/Spa/jet/2/config", "{\"name\":\"Hot tub jet2\",\"uniq_id\":\"ESP82Spa_9\",\"cmd_t\":\"Spa/jet/2/set\",\"stat_t\":\"Spa/jet/2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+        mqtt.publish("homeassistant/switch/Spa/jet_2/config", "{\"name\":\"Hot tub jet2\",\"uniq_id\":\"ESP82Spa_9\",\"cmd_t\":\"Spa/jet_2/set\",\"stat_t\":\"Spa/jet_2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
         //blower
         mqtt.publish("homeassistant/switch/Spa/blower/config", "{\"name\":\"Hot tub blower\",\"uniq_id\":\"ESP82Spa_10\",\"cmd_t\":\"Spa/blower/set\",\"stat_t\":\"Spa/blower/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
 
@@ -158,14 +165,14 @@ void reconnect() {
       // ... and resubscribe
       mqtt.subscribe("Spa/command");
       mqtt.subscribe("Spa/target_temp/set");
-      mqtt.subscribe("Spa/heatmode/set");
+      mqtt.subscribe("Spa/heatingmode/set");
       mqtt.subscribe("Spa/highrange/set");
-      mqtt.subscribe("Spa/jets/1/set");
-      mqtt.subscribe("Spa/jets/2/set");
+      mqtt.subscribe("Spa/jet_1/set");
+      mqtt.subscribe("Spa/jet_2/set");
       mqtt.subscribe("Spa/blower/set");
       mqtt.subscribe("Spa/light/set");
-      mqtt.subscribe("Spa/relay/1/set");
-      mqtt.subscribe("Spa/relay/2/set");
+      mqtt.subscribe("Spa/relay_1/set");
+      mqtt.subscribe("Spa/relay_2/set");
 
       last_state_crc = 0x00;
     }
@@ -211,10 +218,10 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
   } else if (topic.equals("Spa/light/set")) {
     if (payload.equals("ON") && SpaState.light == 0) send = 0x11;
     else if (payload.equals("OFF") && SpaState.light == 1) send = 0x11;
-  } else if (topic.equals("Spa/jet/1/set")) {
+  } else if (topic.equals("Spa/jet_1/set")) {
     if (payload.equals("ON") && SpaState.jet1 == 0) send = 0x04;
     else if (payload.equals("OFF") && SpaState.jet1 == 1) send = 0x04;
-  } else if (topic.equals("Spa/jet/2/set")) {
+  } else if (topic.equals("Spa/jet_2/set")) {
     if (payload.equals("ON") && SpaState.jet2 == 0) send = 0x05;
     else if (payload.equals("OFF") && SpaState.jet2 == 1) send = 0x05;
   } else if (topic.equals("Spa/blower/set")) {
@@ -394,6 +401,8 @@ void loop() {
         // 10:Flag Byte 5 - Heating Mode
         switch (Q_in[10]) {
           case 0:mqtt.publish("Spa/heatingmode/state", STRON); //Ready
+            SpaState.restmode = 0;
+            break;
           case 3:// Ready-in-Rest
             SpaState.restmode = 0;
             break;
@@ -418,18 +427,18 @@ void loop() {
 
         // 16:Flags Byte 11
         if (bitRead(Q_in[16], 1) == 1) {
-          mqtt.publish("Spa/jet/1/state", STRON);
+          mqtt.publish("Spa/jet_1/state", STRON);
           SpaState.jet1 = 1;
         } else {
-          mqtt.publish("Spa/jet/1/state", STROFF);
+          mqtt.publish("Spa/jet_1/state", STROFF);
           SpaState.jet1 = 0;
         }
 
         if (bitRead(Q_in[16], 3) == 1) {
-          mqtt.publish("Spa/jet/2/state", STRON);
+          mqtt.publish("Spa/jet_2/state", STRON);
           SpaState.jet2 = 1;
         } else {
-          mqtt.publish("Spa/jet/2/state", STROFF);
+          mqtt.publish("Spa/jet_2/state", STROFF);
           SpaState.jet2 = 0;
         }
 
@@ -460,11 +469,11 @@ void loop() {
         // Publish own relay states
         s = "OFF";
         if (digitalRead(RLY1) == LOW) s = "ON";
-        mqtt.publish("Spa/state/relay1", s.c_str());
+        mqtt.publish("Spa/relay_1/state", s.c_str());
 
         s = "OFF";
         if (digitalRead(RLY2) == LOW) s = "ON";
-        mqtt.publish("Spa/state/relay2", s.c_str());
+        mqtt.publish("Spa/relay_2/state", s.c_str());
       }
     } else {
       // DEBUG for finding meaning
