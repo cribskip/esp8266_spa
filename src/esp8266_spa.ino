@@ -19,7 +19,7 @@
 // A    YELLOW
 // B    WHITE
 
-#define VERSION "0.24"
+#define VERSION "0.25"
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
@@ -66,6 +66,9 @@ uint8_t settemp = 0x00;
 uint8_t id = 0x00;
 
 unsigned long lastrx = 0;
+
+boolean start = true;
+
 
 struct {
   uint8_t jet1 :1;
@@ -342,10 +345,21 @@ void loop() {
           Q_out.push(0x20);
           Q_out.push(settemp);
         } else if (send == 0x00) {
-          // A Nothing to Send message is sent by a client immediately after a Clear to Send message if the client has no messages to send.
-          Q_out.push(id);
-          Q_out.push(0xBF);
-          Q_out.push(0x07);
+          if (start == true) { // Get configuration of the hot tub
+            Q_out.push(id);
+            Q_out.push(0xBF);
+            Q_out.push(0x22);
+            Q_out.push(0x00);
+            Q_out.push(0x00);
+            Q_out.push(0x01);
+            //mqtt.publish("Spa/config/status", "Getting config");
+          } else {
+            // A Nothing to Send message is sent by a client immediately after a Clear to Send message if the client has no messages to send.
+            Q_out.push(id);
+            Q_out.push(0xBF);
+            Q_out.push(0x07);
+          }
+          start = false;
         } else {
           // Send toggle commands
           Q_out.push(id);
@@ -357,6 +371,18 @@ void loop() {
 
         rs485_send();
         send = 0x00;
+      }
+    }
+
+    //Configuration response on startup
+    if (Q_in[2] == id && Q_in[4] == 0x2E) {
+      if (last_state_crc != Q_in[Q_in[1]]) {
+        //mqtt.publish("Spa/config/status", "Got config");
+        mqtt.publish("Spa/config/pumps14", String(Q_in[5]).c_str());
+        mqtt.publish("Spa/config/pumps56", String(Q_in[6]).c_str());
+        mqtt.publish("Spa/config/lights", String(Q_in[7]).c_str());
+        mqtt.publish("Spa/config/circ", String(Q_in[8]).c_str());
+        mqtt.publish("Spa/config/aux", String(Q_in[9]).c_str());
       }
     }
 
