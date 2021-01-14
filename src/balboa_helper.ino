@@ -41,8 +41,13 @@ inline void ID_ack() {
 
 void rs485_send() {
   // The following is not required for the new RS485 chip
-  //digitalWrite(TX485, HIGH);
-  //delay(1);
+  if (AUTO_TX) {
+
+  } else {
+    digitalWrite(TX485, HIGH);
+    delay(1);
+  }
+
 
   // Add telegram length
   Q_out.unshift(Q_out.size() + 2);

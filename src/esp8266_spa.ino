@@ -25,6 +25,8 @@
 #define BROKER ""
 #define BROKER_LOGIN ""
 #define BROKER_PASS ""
+#define AUTO_TX true //flag for the RS485/TTL chip - i.e. do we need to pull D1 or not....
+
 
 #define STRON String("ON").c_str()
 #define STROFF String("OFF").c_str()
@@ -32,7 +34,7 @@
 //HomeAssistant autodiscover
 #define HASSIO true
 
-//#define TX485 D1
+#define TX485 D1  //find a way to skip this
 #define RLY1  D7
 #define RLY2  D8
 
@@ -246,8 +248,12 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
 
 void setup() {
   // Begin RS485 in listening mode -> no longer required with new RS485 chip
-  //pinMode(TX485, OUTPUT);
-  //digitalWrite(TX485, LOW);
+  if (AUTO_TX){
+
+  } else {
+    pinMode(TX485, OUTPUT);
+    digitalWrite(TX485, LOW);
+  }
 
   pinMode(RLY1, OUTPUT);
   digitalWrite(RLY1, HIGH);
