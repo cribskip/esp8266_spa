@@ -19,7 +19,7 @@
 // A    YELLOW
 // B    WHITE
 
-#define VERSION "0.25"
+#define VERSION "0.26"
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
@@ -110,6 +110,7 @@ void hardreset() {
 void reconnect() {
   int oldstate = mqtt.state();
   boolean connection = false;
+  String Payload;
 
   // Loop until we're reconnected
   if (!mqtt.connected()) {
@@ -134,7 +135,8 @@ void reconnect() {
         mqtt.publish("/Spa", "");
 
         //temperature
-        mqtt.publish("homeassistant/binary_sensor/Spa/state/config", "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\"0.24\"}}");
+        Payload = "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\""+String(VERSION)+"\"}}";
+        mqtt.publish("homeassistant/binary_sensor/Spa/state/config", Payload.c_str());
         //temperature
         mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\",\"uniq_id\":\"ESP82Spa_2\",\"dev_cla\":\"temperature\",\"stat_t\":\"Spa/temperature/state\",\"unit_of_meas\":\"°C\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
         //target_temperature
