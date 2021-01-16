@@ -19,7 +19,7 @@
 // A    YELLOW
 // B    WHITE
 
-#define VERSION "0.26"
+#define VERSION "0.27"
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
@@ -82,6 +82,22 @@ struct {
   uint8_t padding :2;
 } SpaState;
 
+struct {
+  uint8_t pump1 :2;
+  uint8_t pump2 :2;
+  uint8_t pump3 :2;
+  uint8_t pump4 :2;
+  uint8_t pump5 :2;
+  uint8_t pump6 :2;
+  uint8_t light1 :1;
+  uint8_t light2 :1;
+  uint8_t circ :1;
+  uint8_t blower :1;
+  uint8_t mister :1;
+  uint8_t aux1 :1;
+  uint8_t aux2 :1;
+} SpaConfig;
+
 void _yield() {
   yield();
   mqtt.loop();
@@ -91,7 +107,7 @@ void print_msg(CircularBuffer<uint8_t, 35> &data) {
   String s;
   //for (i = 0; i < (Q_in[1] + 2); i++) {
   for (i = 0; i < data.size(); i++) {
-    x = data[i];
+    x = Q_in[i];
     if (x < 0x0A) s += "0";
     s += String(x, HEX);
     s += " ";
@@ -386,11 +402,33 @@ void loop() {
     if (Q_in[2] == id && Q_in[4] == 0x2E) {
       if (last_state_crc != Q_in[Q_in[1]]) {
         //mqtt.publish("Spa/config/status", "Got config");
-        mqtt.publish("Spa/config/pumps14", String(Q_in[5]).c_str());
-        mqtt.publish("Spa/config/pumps56", String(Q_in[6]).c_str());
-        mqtt.publish("Spa/config/lights", String(Q_in[7]).c_str());
-        mqtt.publish("Spa/config/circ", String(Q_in[8]).c_str());
-        mqtt.publish("Spa/config/aux", String(Q_in[9]).c_str());
+        SpaConfig.pump1 = Q_in[5] & 0x03;
+        SpaConfig.pump2 = (Q_in[5] & 0x0C) >> 2;
+        SpaConfig.pump3 = (Q_in[5] & 0x30) >> 4;
+        SpaConfig.pump4 = (Q_in[5] & 0xC0) >> 6;
+        SpaConfig.pump5 = (Q_in[6] & 0x03);
+        SpaConfig.pump6 = (Q_in[6] & 0xC0) >> 6;
+        SpaConfig.light1 = (Q_in[7] & 0x03);
+        SpaConfig.light2 = (Q_in[7] >> 2) & 0x03;
+        SpaConfig.circ = ((Q_in[8] & 0x80) != 0);
+        SpaConfig.blower = ((Q_in[8] & 0x03) != 0);
+        SpaConfig.mister = ((Q_in[9] & 0x30) != 0);
+        SpaConfig.aux1 = ((Q_in[9] & 0x01) != 0);
+        SpaConfig.aux2 = ((Q_in[9] & 0x02) != 0);
+        mqtt.publish("Spa/config/pumps1", String(SpaConfig.pump1).c_str());
+        mqtt.publish("Spa/config/pumps2", String(SpaConfig.pump2).c_str());
+        mqtt.publish("Spa/config/pumps3", String(SpaConfig.pump3).c_str());
+        mqtt.publish("Spa/config/pumps4", String(SpaConfig.pump4).c_str());
+        mqtt.publish("Spa/config/pumps5", String(SpaConfig.pump5).c_str());
+        mqtt.publish("Spa/config/pumps6", String(SpaConfig.pump6).c_str());
+        mqtt.publish("Spa/config/light1", String(SpaConfig.light1).c_str());
+        mqtt.publish("Spa/config/light2", String(SpaConfig.light2).c_str());
+        mqtt.publish("Spa/config/circ", String(SpaConfig.circ).c_str());
+        mqtt.publish("Spa/config/blower", String(SpaConfig.blower).c_str());
+        mqtt.publish("Spa/config/mister", String(SpaConfig.mister).c_str());
+        mqtt.publish("Spa/config/aux1", String(SpaConfig.aux1).c_str());
+        mqtt.publish("Spa/config/aux2", String(SpaConfig.aux2).c_str());
+
       }
     }
 
