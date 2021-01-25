@@ -19,7 +19,7 @@
 // A    YELLOW
 // B    WHITE
 
-#define VERSION "0.27"
+#define VERSION "0.28"
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
@@ -69,7 +69,7 @@ uint8_t id = 0x00;
 
 unsigned long lastrx = 0;
 
-boolean start = true;
+char have_config = 0; //stages: 0-> don't have config; 1-> requested config; 2-> have config; 3-> dealt with config
 
 
 struct {
@@ -83,7 +83,7 @@ struct {
 } SpaState;
 
 struct {
-  uint8_t pump1 :2;
+  uint8_t pump1 :2; //this could be 1=1 speed; 2=2 speeds
   uint8_t pump2 :2;
   uint8_t pump3 :2;
   uint8_t pump4 :2;
@@ -123,82 +123,116 @@ void hardreset() {
   while (1) {};
 }
 
-void reconnect() {
-  int oldstate = mqtt.state();
-  boolean connection = false;
+void mqttpubsub() {
+  // ONLY DO THE FOLLOWING IF have_config == true otherwise it will not work
   String Payload;
+
+  // ... Hassio autodiscover
+  if (HASSIO) {
+
+      //clear topics:
+      mqtt.publish("homeassistant/binary_sensor/Spa", "");
+      mqtt.publish("homeassistant/sensor/Spa", "");
+      mqtt.publish("homeassistant/switch/Spa", "");
+      mqtt.publish("/Spa", "");
+
+      //temperature
+      Payload = "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\""+String(VERSION)+"\"}}";
+      mqtt.publish("homeassistant/binary_sensor/Spa/state/config", Payload.c_str());
+      //temperature
+      mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\",\"uniq_id\":\"ESP82Spa_2\",\"dev_cla\":\"temperature\",\"stat_t\":\"Spa/temperature/state\",\"unit_of_meas\":\"°C\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      //target_temperature
+      //mqtt.publish("homeassistant/switch/Spa/target_temp/config", "{\"name\":\"Hot tub target temperature\",\"cmd_t\":\"Spa/target_temp/set\",\"stat_t\":\"Spa/target_temp/state\",\"unit_of_measurement\":\"°C\"}");
+      //heat mode
+      mqtt.publish("homeassistant/switch/Spa/heatingmode/config", "{\"name\":\"Hot tub heating mode\",\"uniq_id\":\"ESP82Spa_3\",\"cmd_t\":\"Spa/heatingmode/set\",\"stat_t\":\"Spa/heatingmode/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      //heating state
+      mqtt.publish("homeassistant/binary_sensor/Spa/heatstate/config", "{\"name\":\"Hot tub heating state\",\"uniq_id\":\"ESP82Spa_6\",\"stat_t\":\"Spa/heatstate/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      //high range
+      mqtt.publish("homeassistant/switch/Spa/highrange/config", "{\"name\":\"Hot tub high range\",\"uniq_id\":\"ESP82Spa_4\",\"cmd_t\":\"Spa/highrange/set\",\"stat_t\":\"Spa/highrange/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+
+      //OPTIONAL ELEMENTS
+      if (SpaConfig.circ){
+        //circulation pump
+        mqtt.publish("homeassistant/binary_sensor/Spa/circ/config", "{\"name\":\"Hot tub circulation pump\",\"uniq_id\":\"ESP82Spa_5\",\"device_class\":\"power\",\"stat_t\":\"Spa/circ/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      }
+      if (SpaConfig.light1) {
+        //light 1
+        mqtt.publish("homeassistant/switch/Spa/light/config", "{\"name\":\"Hot tub light\",\"uniq_id\":\"ESP82Spa_7\",\"cmd_t\":\"Spa/light/set\",\"stat_t\":\"Spa/light/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      }
+      if (SpaConfig.pump1 != 0) {
+        //jets 1
+        mqtt.publish("homeassistant/switch/Spa/jet_1/config", "{\"name\":\"Hot tub jet1\",\"uniq_id\":\"ESP82Spa_8\",\"cmd_t\":\"Spa/jet_1/set\",\"stat_t\":\"Spa/jet_1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      }
+      if (SpaConfig.pump2 != 0) {
+        //jets 2
+        mqtt.publish("homeassistant/switch/Spa/jet_2/config", "{\"name\":\"Hot tub jet2\",\"uniq_id\":\"ESP82Spa_9\",\"cmd_t\":\"Spa/jet_2/set\",\"stat_t\":\"Spa/jet_2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      }
+      if (SpaConfig.blower)
+      {
+        //blower
+        mqtt.publish("homeassistant/switch/Spa/blower/config", "{\"name\":\"Hot tub blower\",\"uniq_id\":\"ESP82Spa_10\",\"cmd_t\":\"Spa/blower/set\",\"stat_t\":\"Spa/blower/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      }
+
+  }
+
+  mqtt.publish("Spa/state", "ON");
+  mqtt.publish("Spa/node/debug", "RECONNECT");
+  //mqtt.publish("Spa/node/debug", String(millis()).c_str());
+  //mqtt.publish("Spa/node/debug", String(oldstate).c_str());
+  mqtt.publish("Spa/node/version", VERSION);
+  mqtt.publish("Spa/node/flashsize", String(ESP.getFlashChipRealSize()).c_str());
+  mqtt.publish("Spa/node/chipid", String(ESP.getChipId()).c_str());
+
+  // ... and resubscribe
+  mqtt.subscribe("Spa/command");
+  mqtt.subscribe("Spa/target_temp/set");
+  mqtt.subscribe("Spa/heatingmode/set");
+  mqtt.subscribe("Spa/highrange/set");
+
+  //OPTIONAL ELEMENTS
+  if (SpaConfig.pump1 != 0) {
+    mqtt.subscribe("Spa/jet_1/set");
+  }
+  if (SpaConfig.pump2 != 0) {
+    mqtt.subscribe("Spa/jet_2/set");
+  }
+  if (SpaConfig.blower) {
+    mqtt.subscribe("Spa/blower/set");
+  }
+  if (SpaConfig.light1) {
+    mqtt.subscribe("Spa/light/set");
+  }
+
+  mqtt.subscribe("Spa/relay_1/set");
+  mqtt.subscribe("Spa/relay_2/set");
+
+  //not sure what this is
+  last_state_crc = 0x00;
+
+  //done with config
+  have_config = 3;
+}
+
+void reconnect() {
+  //int oldstate = mqtt.state();
+  //boolean connection = false;
 
   // Loop until we're reconnected
   if (!mqtt.connected()) {
     // Attempt to connect
     if (BROKER_PASS == "") {
-      connection = mqtt.connect(String(String("Spa") + String(millis())).c_str());
+      //connection =
+      mqtt.connect(String(String("Spa") + String(millis())).c_str());
     }
     else {
-      connection = mqtt.connect("Spa1", BROKER_LOGIN, BROKER_PASS);
+      //connection =
+      mqtt.connect("Spa1", BROKER_LOGIN, BROKER_PASS);
     }
 
 
-    if (connection) { //, "Spa/node", 0, true, "OFF")) {
+    //if (connection) { //, "Spa/node", 0, true, "OFF")) {
+    //}
 
-      // ... Hassio autodiscover
-    if (HASSIO) {
-
-        //clear topics:
-        mqtt.publish("homeassistant/binary_sensor/Spa", "");
-        mqtt.publish("homeassistant/sensor/Spa", "");
-        mqtt.publish("homeassistant/switch/Spa", "");
-        mqtt.publish("/Spa", "");
-
-        //temperature
-        Payload = "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\""+String(VERSION)+"\"}}";
-        mqtt.publish("homeassistant/binary_sensor/Spa/state/config", Payload.c_str());
-        //temperature
-        mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\",\"uniq_id\":\"ESP82Spa_2\",\"dev_cla\":\"temperature\",\"stat_t\":\"Spa/temperature/state\",\"unit_of_meas\":\"°C\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-        //target_temperature
-        //mqtt.publish("homeassistant/switch/Spa/target_temp/config", "{\"name\":\"Hot tub target temperature\",\"cmd_t\":\"Spa/target_temp/set\",\"stat_t\":\"Spa/target_temp/state\",\"unit_of_measurement\":\"°C\"}");
-        //heat mode
-        mqtt.publish("homeassistant/switch/Spa/heatingmode/config", "{\"name\":\"Hot tub heating mode\",\"uniq_id\":\"ESP82Spa_3\",\"cmd_t\":\"Spa/heatingmode/set\",\"stat_t\":\"Spa/heatingmode/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-        //high range
-        mqtt.publish("homeassistant/switch/Spa/highrange/config", "{\"name\":\"Hot tub high range\",\"uniq_id\":\"ESP82Spa_4\",\"cmd_t\":\"Spa/highrange/set\",\"stat_t\":\"Spa/highrange/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-        //circulation pump
-        mqtt.publish("homeassistant/binary_sensor/Spa/circ/config", "{\"name\":\"Hot tub circulation pump\",\"uniq_id\":\"ESP82Spa_5\",\"device_class\":\"power\",\"stat_t\":\"Spa/circ/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-        //heating state
-        mqtt.publish("homeassistant/binary_sensor/Spa/heatstate/config", "{\"name\":\"Hot tub heating state\",\"uniq_id\":\"ESP82Spa_6\",\"stat_t\":\"Spa/heatstate/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-        //light 1
-        mqtt.publish("homeassistant/switch/Spa/light/config", "{\"name\":\"Hot tub light\",\"uniq_id\":\"ESP82Spa_7\",\"cmd_t\":\"Spa/light/set\",\"stat_t\":\"Spa/light/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-        //jets 1
-        mqtt.publish("homeassistant/switch/Spa/jet_1/config", "{\"name\":\"Hot tub jet1\",\"uniq_id\":\"ESP82Spa_8\",\"cmd_t\":\"Spa/jet_1/set\",\"stat_t\":\"Spa/jet_1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-        //jets 2
-        mqtt.publish("homeassistant/switch/Spa/jet_2/config", "{\"name\":\"Hot tub jet2\",\"uniq_id\":\"ESP82Spa_9\",\"cmd_t\":\"Spa/jet_2/set\",\"stat_t\":\"Spa/jet_2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-        //blower
-        mqtt.publish("homeassistant/switch/Spa/blower/config", "{\"name\":\"Hot tub blower\",\"uniq_id\":\"ESP82Spa_10\",\"cmd_t\":\"Spa/blower/set\",\"stat_t\":\"Spa/blower/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-
-    }
-
-
-      mqtt.publish("Spa/state", "ON");
-      mqtt.publish("Spa/node/debug", "RECONNECT");
-      mqtt.publish("Spa/node/debug", String(millis()).c_str());
-      mqtt.publish("Spa/node/debug", String(oldstate).c_str());
-      mqtt.publish("Spa/node/version", VERSION);
-      mqtt.publish("Spa/node/flashsize", String(ESP.getFlashChipRealSize()).c_str());
-      mqtt.publish("Spa/node/chipid", String(ESP.getChipId()).c_str());
-
-      // ... and resubscribe
-      mqtt.subscribe("Spa/command");
-      mqtt.subscribe("Spa/target_temp/set");
-      mqtt.subscribe("Spa/heatingmode/set");
-      mqtt.subscribe("Spa/highrange/set");
-      mqtt.subscribe("Spa/jet_1/set");
-      mqtt.subscribe("Spa/jet_2/set");
-      mqtt.subscribe("Spa/blower/set");
-      mqtt.subscribe("Spa/light/set");
-      mqtt.subscribe("Spa/relay_1/set");
-      mqtt.subscribe("Spa/relay_2/set");
-
-      last_state_crc = 0x00;
-    }
   }
 }
 
@@ -319,6 +353,7 @@ void setup() {
 void loop() {
   if (WiFi.status() != WL_CONNECTED) ESP.restart();
   if (!mqtt.connected()) reconnect();
+  if (have_config == 2) mqttpubsub(); //do mqtt stuff after we're connected and if we have got the config elements
   httpServer.handleClient();
   _yield();
 
@@ -369,21 +404,21 @@ void loop() {
           Q_out.push(0x20);
           Q_out.push(settemp);
         } else if (send == 0x00) {
-          if (start == true) { // Get configuration of the hot tub
+          if (have_config == 0) { // Get configuration of the hot tub
             Q_out.push(id);
             Q_out.push(0xBF);
             Q_out.push(0x22);
             Q_out.push(0x00);
             Q_out.push(0x00);
             Q_out.push(0x01);
-            //mqtt.publish("Spa/config/status", "Getting config");
+            mqtt.publish("Spa/config/status", "Getting config");
+            have_config = 1; //technically we don't have the config then but let's assume this works to get it
           } else {
             // A Nothing to Send message is sent by a client immediately after a Clear to Send message if the client has no messages to send.
             Q_out.push(id);
             Q_out.push(0xBF);
             Q_out.push(0x07);
           }
-          start = false;
         } else {
           // Send toggle commands
           Q_out.push(id);
@@ -398,7 +433,7 @@ void loop() {
       }
     }
 
-    //Configuration response on startup
+    //Configuration response
     if (Q_in[2] == id && Q_in[4] == 0x2E) {
       if (last_state_crc != Q_in[Q_in[1]]) {
         //mqtt.publish("Spa/config/status", "Got config");
@@ -428,7 +463,7 @@ void loop() {
         mqtt.publish("Spa/config/mister", String(SpaConfig.mister).c_str());
         mqtt.publish("Spa/config/aux1", String(SpaConfig.aux1).c_str());
         mqtt.publish("Spa/config/aux2", String(SpaConfig.aux2).c_str());
-
+        have_config = 2;
       }
     }
 
