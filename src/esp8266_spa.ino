@@ -668,7 +668,7 @@ void loop() {
             Q_out.push(0xBF);
             Q_out.push(0x22);
             Q_out.push(0x20);
-            Q_out.push(0x00);
+            Q_out.push(0xFF);
             Q_out.push(0x00);
             have_faultlog = 1;
           } else {
