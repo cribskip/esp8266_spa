@@ -43,7 +43,7 @@
 -I/home/emmanuelmoll/.platformio/packages/toolchain-xtensa/lib/gcc/xtensa-lx106-elf/4.8.2/include
 -I/home/emmanuelmoll/.platformio/packages/toolchain-xtensa/xtensa-lx106-elf/include
 -I/home/emmanuelmoll/.platformio/packages/tool-unity
--DPLATFORMIO=50004
+-DPLATFORMIO=50100
 -DESP8266
 -DARDUINO_ARCH_ESP8266
 -DARDUINO_ESP8266_WEMOS_D1MINIPRO
