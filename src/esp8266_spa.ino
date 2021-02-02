@@ -19,7 +19,7 @@
 // A    YELLOW
 // B    WHITE
 
-#define VERSION "0.30"
+#define VERSION "0.31"
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
@@ -369,7 +369,7 @@ void mqttpubsub() {
   // ... Hassio autodiscover
   if (HASSIO) {
 
-      //clear topics:
+      //clear topics?:
       mqtt.publish("homeassistant/binary_sensor/Spa", "");
       mqtt.publish("homeassistant/sensor/Spa", "");
       mqtt.publish("homeassistant/switch/Spa", "");
@@ -423,6 +423,7 @@ void mqttpubsub() {
   mqtt.publish("Spa/node/version", VERSION);
   mqtt.publish("Spa/node/flashsize", String(ESP.getFlashChipRealSize()).c_str());
   mqtt.publish("Spa/node/chipid", String(ESP.getChipId()).c_str());
+  mqtt.publish("Spa/node/speed", String(ESP.getCpuFreqMHz()).c_str());
 
   // ... and resubscribe
   mqtt.subscribe("Spa/command");
@@ -470,7 +471,7 @@ void reconnect() {
     }
 
     if (have_config == 3) {
-      have_config = 2; // we have disconnected, let's republish our configuration
+      have_config = 2; // we have disconnected and reconnected, let's republish our configuration
     }
 
   }
@@ -608,11 +609,10 @@ void loop() {
     lastrx = millis();
   }
 
-  //Every x minutes, read the fault log using SpaState,minutes
+  //Every x minutes, read the fault log using SpaState.minutes
   if (SpaState.minutes % 5 == 0)
   {
     //logic to only get the error message once -> this is dirty
-    //have_faultlog = 0;
     if (have_faultlog == 2) { // we got the fault log before and treated it
       if (faultlog_minutes == SpaState.minutes) { // we got the fault log this interval so do nothing
       }
@@ -694,27 +694,27 @@ void loop() {
 
         rs485_send();
         send = 0x00;
+      } else if (Q_in[4] == 0x2E) {
+        if (last_state_crc != Q_in[Q_in[1]]) {
+          decodeSettings();
+        }
+      } else if (Q_in[4] == 0x28) {
+        if (last_state_crc != Q_in[Q_in[1]]) {
+          decodeFault();
+        }
+      } else if (Q_in[4] == 0x13) { // FF AF 13:Status Update - Packet index offset 5
+        if (last_state_crc != Q_in[Q_in[1]]) {
+          decodeState();
+        }
+      } else {
+        // DEBUG for finding meaning
+        //if (Q_in[2] & 0xFE || Q_in[2] == id)
+        //print_msg(Q_in);
       }
     }
 
     //Configuration response
-    if (Q_in[2] == id && Q_in[4] == 0x2E) {
-      if (last_state_crc != Q_in[Q_in[1]]) {
-        decodeSettings();
-      }
-    } else if (Q_in[2] == id && Q_in[4] == 0x28) {
-      if (last_state_crc != Q_in[Q_in[1]]) {
-        decodeFault();
-      }
-    } else if (Q_in[2] == 0xFF && Q_in[4] == 0x13) { // FF AF 13:Status Update - Packet index offset 5
-      if (last_state_crc != Q_in[Q_in[1]]) {
-        decodeState();
-      }
-    } else {
-      // DEBUG for finding meaning
-      //if (Q_in[2] & 0xFE || Q_in[2] == id)
-      //print_msg(Q_in);
-    }
+
 
     // Clean up queue
     _yield();
