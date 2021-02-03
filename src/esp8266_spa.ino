@@ -19,14 +19,13 @@
 // A    YELLOW
 // B    WHITE
 
-#define VERSION "0.32"
+#define VERSION "0.33"
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
 #define BROKER ""
 #define BROKER_LOGIN ""
 #define BROKER_PASS ""
-#define AUTO_TX true //flag for the RS485/TTL chip - i.e. do we need to pull D1 or not....
-
+#define AUTO_TX true //if your chip needs to pull D1 high/low set this to false
 
 #define STRON String("ON").c_str()
 #define STROFF String("OFF").c_str()
@@ -115,6 +114,7 @@ struct {
 void _yield() {
   yield();
   mqtt.loop();
+  httpServer.handleClient();
 }
 
 void print_msg(CircularBuffer<uint8_t, 35> &data) {
@@ -596,7 +596,7 @@ void loop() {
   if (WiFi.status() != WL_CONNECTED) ESP.restart();
   if (!mqtt.connected()) reconnect();
   if (have_config == 2) mqttpubsub(); //do mqtt stuff after we're connected and if we have got the config elements
-  httpServer.handleClient();
+  //httpServer.handleClient(); needed?
   _yield();
 
   // Read from Spa RS485
