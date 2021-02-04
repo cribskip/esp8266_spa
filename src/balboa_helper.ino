@@ -40,8 +40,14 @@ inline void ID_ack() {
 }
 
 void rs485_send() {
-  digitalWrite(TX485, HIGH);
-  delay(1);
+  // The following is not required for the new RS485 chip
+  if (AUTO_TX) {
+
+  } else {
+    digitalWrite(TX485, HIGH);
+    delay(1);
+  }
+
 
   // Add telegram length
   Q_out.unshift(Q_out.size() + 2);
@@ -56,9 +62,15 @@ void rs485_send() {
   for (i = 0; i < Q_out.size(); i++)
     Serial.write(Q_out[i]);
 
+  //print_msg(Q_out);
+
   Serial.flush();
 
-  digitalWrite(TX485, LOW);
+  if (AUTO_TX) {
+
+  } else {
+    digitalWrite(TX485, LOW);
+  }
 
   // DEBUG: print_msg(Q_out);
   Q_out.clear();
