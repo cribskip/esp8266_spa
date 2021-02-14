@@ -18,14 +18,21 @@
 // GND  BLACK
 // A    YELLOW
 // B    WHITE
+#include <LittleFS.h>
+#include <ArduinoJson.h>
 
-#define VERSION "0.33"
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
-#define BROKER ""
-#define BROKER_LOGIN ""
-#define BROKER_PASS ""
+
+
+#define VERSION "0.34"
+String WIFI_SSID = "";
+String WIFI_PASSWORD = "";
+String BROKER = "";
+String BROKER_LOGIN = "";
+String BROKER_PASS = "";
 #define AUTO_TX true //if your chip needs to pull D1 high/low set this to false
+#define SAVE_CONN false //save the ip details above to local filesystem
+
+
 
 #define STRON String("ON").c_str()
 #define STROFF String("OFF").c_str()
@@ -71,7 +78,7 @@ unsigned long lastrx = 0;
 char have_config = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char have_faultlog = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char faultlog_minutes = 0; //temp logic so we only get the fault log once per 5 minutes
-
+char ip_settings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 
 struct {
   uint8_t jet1 :1;
@@ -467,7 +474,7 @@ void reconnect() {
     }
     else {
       //connection =
-      mqtt.connect("Spa1", BROKER_LOGIN, BROKER_PASS);
+      mqtt.connect("Spa1", BROKER_LOGIN.c_str(), BROKER_PASS.c_str());
     }
 
     if (have_config == 3) {
@@ -541,6 +548,78 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
 ///////////////////////////////////////////////////////////////////////////////
 
 void setup() {
+  DynamicJsonDocument jsonSettings(1024);
+  //jsonSettings["WIFI_SSID"] = "";
+  //jsonSettings["WIFI_PASSWORD"] = "";
+  //jsonSettings["BROKER"] = "";
+  //jsonSettings["BROKER_LOGIN"] = "";
+  //jsonSettings["BROKER_PASS"] = "";
+
+  String error_msg = "";
+
+  //if (LittleFS.format()){
+
+  if (LittleFS.begin()) {
+
+  if (SAVE_CONN == true) {
+    File f = LittleFS.open("/ip.txt", "w");
+    if (!f) {
+      error_msg = "failed to create file";
+    }
+
+    jsonSettings["WIFI_SSID"] = WIFI_SSID;
+    jsonSettings["WIFI_PASSWORD"] = WIFI_PASSWORD;
+    jsonSettings["BROKER"] = BROKER;
+    jsonSettings["BROKER_LOGIN"] = BROKER_LOGIN;
+    jsonSettings["BROKER_PASS"] = BROKER_PASS;
+
+    if (serializeJson(jsonSettings, f) == 0) {
+      error_msg = "failed to write file";
+    }
+
+    f.close();
+  }
+
+  jsonSettings["WIFI_SSID"] = "";
+  jsonSettings["WIFI_PASSWORD"] = "";
+  jsonSettings["BROKER"] = "";
+  jsonSettings["BROKER_LOGIN"] = "";
+  jsonSettings["BROKER_PASS"] = "";
+
+  if (ip_settings == 0) {
+    ip_settings = 1;
+    //read the settings from filesystem, if empty, put in AP mode
+
+    File file = LittleFS.open("/ip.txt", "r");
+    if (!file) {
+      error_msg = "could not open file for reading";
+    } else {
+      deserializeJson(jsonSettings, file);
+      //Filesystem methods assuming it all went well
+
+      //now I have them - NOTE: PROBABLY NEED TO CHECK THEM!!!!!
+      ip_settings = 2;
+      WIFI_SSID = jsonSettings["WIFI_SSID"].as<String>();
+      WIFI_PASSWORD = jsonSettings["WIFI_PASSWORD"].as<String>();
+      BROKER = jsonSettings["BROKER"].as<String>();
+      BROKER_LOGIN = jsonSettings["BROKER_LOGIN"].as<String>();
+      BROKER_PASS = jsonSettings["BROKER_PASS"].as<String>();
+      error_msg = "Successfully read the configuration";
+    }
+    file.close();
+
+  }
+} else {
+  error_msg = "Could not mount fs";
+}
+//} else {
+//  error_msg = "count not format fs";
+//}
+
+  LittleFS.end();
+
+
+
   // Begin RS485 in listening mode -> no longer required with new RS485 chip
   if (AUTO_TX){
 
@@ -566,19 +645,17 @@ void setup() {
   Q_in.clear();
   Q_out.clear();
 
-  {
-    WiFi.setOutputPower(20.5); // this sets wifi to highest power
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    unsigned long timeout = millis() + 10000;
+  WiFi.setOutputPower(20.5); // this sets wifi to highest power
+  WiFi.begin(WIFI_SSID.c_str(), WIFI_PASSWORD.c_str());
+  unsigned long timeout = millis() + 10000;
 
-    while (WiFi.status() != WL_CONNECTED && millis() < timeout) {
-      yield();
-    }
+  while (WiFi.status() != WL_CONNECTED && millis() < timeout) {
+    yield();
+  }
 
-    // Reset because of no connection
-    if (WiFi.status() != WL_CONNECTED) {
-      hardreset();
-    }
+  // Reset because of no connection
+  if (WiFi.status() != WL_CONNECTED) {
+    hardreset();
   }
 
   httpUpdater.setup(&httpServer, "admin", "");
@@ -586,10 +663,21 @@ void setup() {
   MDNS.begin("Spa");
   MDNS.addService("http", "tcp", 80);
 
-  mqtt.setServer(BROKER, 1883);
+  mqtt.setServer(BROKER.c_str(), 1883);
   mqtt.setCallback(callback);
   mqtt.setKeepAlive(10);
   mqtt.setSocketTimeout(20);
+
+  /*the below is for debug purposes
+  mqtt.connect("Spa1", BROKER_LOGIN.c_str(), BROKER_PASS.c_str());
+  mqtt.publish("Spa/debug/wifi_ssid", WIFI_SSID.c_str());
+  mqtt.publish("Spa/debug/wifi_password", WIFI_PASSWORD.c_str());
+  mqtt.publish("Spa/debug/broker", BROKER.c_str());
+  mqtt.publish("Spa/debug/broker_login", BROKER_LOGIN.c_str());
+  mqtt.publish("Spa/debug/broker_pass", BROKER_PASS.c_str());
+  mqtt.publish("Spa/debug/error", error_msg.c_str());
+  */
+
 }
 
 void loop() {
