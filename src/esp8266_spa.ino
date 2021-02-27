@@ -23,7 +23,7 @@
 
 
 
-#define VERSION "0.34"
+#define VERSION "0.35"
 String WIFI_SSID = "";
 String WIFI_PASSWORD = "";
 String BROKER = "";
@@ -287,12 +287,14 @@ void decodeState() {
   // 10:Flag Byte 5 - Heating Mode
   switch (Q_in[10]) {
     case 0:mqtt.publish("Spa/heatingmode/state", STRON); //Ready
+      mqtt.publish("Spa/heat_mode/state", "heat"); //Ready
       SpaState.restmode = 0;
       break;
     case 3:// Ready-in-Rest
       SpaState.restmode = 0;
       break;
     case 1:mqtt.publish("Spa/heatingmode/state", STROFF); //Rest
+      mqtt.publish("Spa/heat_mode/state", "off"); //Rest
       SpaState.restmode = 1;
       break;
   }
@@ -382,15 +384,15 @@ void mqttpubsub() {
       mqtt.publish("homeassistant/switch/Spa", "");
       mqtt.publish("/Spa", "");
 
-      //temperature
-      Payload = "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\""+String(VERSION)+"\"}}";
+      //temperature -> can we try and remove the Payload below, it's messy
+      Payload = "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/node/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\""+String(VERSION)+"\"}}";
       mqtt.publish("homeassistant/binary_sensor/Spa/state/config", Payload.c_str());
       //temperature
       //mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\",\"uniq_id\":\"ESP82Spa_2\",\"stat_t\":\"Spa/temperature/state\",\"unit_of_meas\":\"°C\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
       //target_temperature
       //mqtt.publish("homeassistant/switch/Spa/target_temp/config", "{\"name\":\"Hot tub target temperature\",\"cmd_t\":\"Spa/target_temp/set\",\"stat_t\":\"Spa/target_temp/state\",\"unit_of_measurement\":\"°C\"}");
       //climate temperature
-      mqtt.publish("homeassistant/climate/Spa/temperature/config", "{\"name\":\"Hot tub thermostat\",\"uniq_id\":\"ESP82Spa_0\",\"temp_cmd_t\":\"Spa/target_temp/set\",\"curr_temp_t\":\"Spa/temperature/state\",\"temp_stat_t\":\"Spa/target_temp/state\",\"min_temp\":\"27\",\"max_temp\":\"40\",\"temp_step\":\"0.5\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/climate/Spa/temperature/config", "{\"name\":\"Hot tub thermostat\",\"uniq_id\":\"ESP82Spa_0\",\"temp_cmd_t\":\"Spa/target_temp/set\",\"mode_cmd_t\":\"Spa/heat_mode/set\",\"mode_stat_t\":\"Spa/heat_mode/state\",\"curr_temp_t\":\"Spa/temperature/state\",\"temp_stat_t\":\"Spa/target_temp/state\",\"min_temp\":\"27\",\"max_temp\":\"40\",\"modes\":[\"off\", \"heat\"], \"temp_step\":\"0.5\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
       //heat mode
       mqtt.publish("homeassistant/switch/Spa/heatingmode/config", "{\"name\":\"Hot tub heating mode\",\"uniq_id\":\"ESP82Spa_3\",\"cmd_t\":\"Spa/heatingmode/set\",\"stat_t\":\"Spa/heatingmode/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
       //heating state
@@ -423,7 +425,7 @@ void mqttpubsub() {
 
   }
 
-  mqtt.publish("Spa/state", "ON");
+  mqtt.publish("Spa/node/state", "ON");
   mqtt.publish("Spa/node/debug", "RECONNECT");
   //mqtt.publish("Spa/node/debug", String(millis()).c_str());
   //mqtt.publish("Spa/node/debug", String(oldstate).c_str());
@@ -436,6 +438,7 @@ void mqttpubsub() {
   mqtt.subscribe("Spa/command");
   mqtt.subscribe("Spa/target_temp/set");
   mqtt.subscribe("Spa/heatingmode/set");
+  mqtt.subscribe("Spa/heat_mode/set");
   mqtt.subscribe("Spa/highrange/set");
 
   //OPTIONAL ELEMENTS
@@ -521,6 +524,9 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
   } else if (topic.equals("Spa/heatingmode/set")) {
     if (payload.equals("ON") && SpaState.restmode == 1) send = 0x51; // ON = Ready; OFF = Rest
     else if (payload.equals("OFF") && SpaState.restmode == 0) send = 0x51;
+  } else if (topic.equals("Spa/heat_mode/set")) {
+    if (payload.equals("heat") && SpaState.restmode == 1) send = 0x51; // ON = Ready; OFF = Rest
+    else if (payload.equals("off") && SpaState.restmode == 0) send = 0x51;
   } else if (topic.equals("Spa/light/set")) {
     if (payload.equals("ON") && SpaState.light == 0) send = 0x11;
     else if (payload.equals("OFF") && SpaState.light == 1) send = 0x11;
