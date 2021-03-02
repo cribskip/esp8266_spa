@@ -501,7 +501,7 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
   _yield();
 
   // handle message topic
-  if (topic.startsWith("Spa/relay/")) {
+  if (topic.startsWith("Spa/relay_")) {
     bool newstate = 0;
 
     if (payload.equals("ON")) newstate = LOW;
