@@ -1,10 +1,12 @@
 -I/home/emmanuelmoll/github/esp8266_spa/include
 -I/home/emmanuelmoll/github/esp8266_spa/src
+-I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/LittleFS/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266HTTPUpdateServer/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266WebServer/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/ArduinoOTA
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266mDNS/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266WiFi/src
+-I/home/emmanuelmoll/github/esp8266_spa/.pio/libdeps/d1_mini_pro/ArduinoJson/src
 -I/home/emmanuelmoll/github/esp8266_spa/.pio/libdeps/d1_mini_pro/PubSubClient/src
 -I/home/emmanuelmoll/github/esp8266_spa/.pio/libdeps/d1_mini_pro/CircularBuffer
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/tools/sdk/include
@@ -12,7 +14,6 @@
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/cores/esp8266
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/tools/sdk/lwip2/include
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/variants/d1_mini
--I/home/emmanuelmoll/github/esp8266_spa/.pio/libdeps/d1_mini_pro/ArduinoJson/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/DNSServer/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/EEPROM
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/ESP8266AVRISP/src
@@ -26,7 +27,6 @@
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/Ethernet/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/GDBStub/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/Hash/src
--I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/LittleFS/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/SD/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/SDFS/src
 -I/home/emmanuelmoll/.platformio/packages/framework-arduinoespressif8266/libraries/SPI
