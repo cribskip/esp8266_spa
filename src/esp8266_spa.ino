@@ -23,7 +23,7 @@
 
 
 
-#define VERSION "0.35"
+#define VERSION "0.36"
 String WIFI_SSID = "";
 String WIFI_PASSWORD = "";
 String BROKER = "";
@@ -77,8 +77,10 @@ unsigned long lastrx = 0;
 
 char have_config = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char have_faultlog = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
-char faultlog_minutes = 0; //temp logic so we only get the fault log once per 5 minutes
+char have_filtersettings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char ip_settings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
+char faultlog_minutes = 0; //temp logic so we only get the fault log once per 5 minutes
+char filtersettings_minutes = 0; //temp logic so we only get the filter settings once per 5 minutes
 
 struct {
   uint8_t jet1 :1;
@@ -117,6 +119,19 @@ struct {
   uint8_t hour :5;
   uint8_t minutes :6;
 } SpaFaultLog;
+
+struct {
+  uint8_t filt1Hour :5;
+  uint8_t filt1Minute :6;
+  uint8_t filt1DuractionHour :5;
+  uint8_t filt1DuractionMinute :6;
+  uint8_t filt2Enable :1;
+  uint8_t filt2Hour :5;
+  uint8_t filt2Minute :6;
+  uint8_t filt2DuractionHour :5;
+  uint8_t filt2DuractionMinute :6;
+
+} SpaFilterSettings;
 
 void _yield() {
   yield();
@@ -214,6 +229,31 @@ void decodeFault() {
   mqtt.publish("Spa/fault/Hours", String(SpaFaultLog.hour).c_str());
   mqtt.publish("Spa/fault/Minutes", String(SpaFaultLog.minutes).c_str());
   have_faultlog = 2;
+  //mqtt.publish("Spa/debug/have_faultlog", "have the faultlog, #2");
+}
+
+void decodeFilterSettings() {
+  SpaFilterSettings.filt1Hour = Q_in[5];
+  SpaFilterSettings.filt1Minute = Q_in[6];
+  SpaFilterSettings.filt1DuractionHour = Q_in[7];
+  SpaFilterSettings.filt1DuractionMinute = Q_in[8];
+  SpaFilterSettings.filt2Enable = Q_in[9] >> 7; // check
+  SpaFilterSettings.filt2Hour = Q_in[9] ^ (SpaFilterSettings.filt2Enable << 7); // check
+  SpaFilterSettings.filt2Minute = Q_in[10];
+  SpaFilterSettings.filt2DuractionHour = Q_in[11];
+  SpaFilterSettings.filt2DuractionMinute = Q_in[12];
+  //MQTT stuff
+  mqtt.publish("Spa/config/filt1Hour", String(SpaFilterSettings.filt1Hour).c_str());
+  mqtt.publish("Spa/config/filt1Minute", String(SpaFilterSettings.filt1Minute).c_str());
+  mqtt.publish("Spa/config/filt1DuractionHour", String(SpaFilterSettings.filt1DuractionHour).c_str());
+  mqtt.publish("Spa/config/filt1DuractionMinute", String(SpaFilterSettings.filt1DuractionMinute).c_str());
+  mqtt.publish("Spa/config/filt2Hour", String(SpaFilterSettings.filt2Hour).c_str());
+  mqtt.publish("Spa/config/filt2Minute", String(SpaFilterSettings.filt2Minute).c_str());
+  mqtt.publish("Spa/config/filt2DuractionHour", String(SpaFilterSettings.filt2DuractionHour).c_str());
+  mqtt.publish("Spa/config/filt2DuractionMinute", String(SpaFilterSettings.filt2DuractionMinute).c_str());
+  mqtt.publish("Spa/config/filt2Enable", String(SpaFilterSettings.filt2Enable).c_str());
+
+  have_filtersettings = 2;
 }
 
 void decodeSettings() {
@@ -618,9 +658,6 @@ void setup() {
 } else {
   error_msg = "Could not mount fs";
 }
-//} else {
-//  error_msg = "count not format fs";
-//}
 
   LittleFS.end();
 
@@ -703,7 +740,7 @@ void loop() {
     lastrx = millis();
   }
 
-  //Every x minutes, read the fault log using SpaState,minutes
+  //Every x minutes, read the fault log and filter settings using SpaState,minutes
   if (SpaState.minutes % 5 == 0)
   {
     //logic to only get the error message once -> this is dirty
@@ -714,6 +751,14 @@ void loop() {
       else {
         faultlog_minutes = SpaState.minutes;
         have_faultlog = 0;
+      }
+    }
+    if (have_filtersettings == 2) { // we got the filter cycles before and treated it
+      if (filtersettings_minutes == SpaState.minutes) { // we got the filter cycles this interval so do nothing
+      }
+      else {
+        filtersettings_minutes = SpaState.minutes;
+        have_filtersettings = 0;
       }
     }
   }
@@ -771,6 +816,16 @@ void loop() {
             Q_out.push(0xFF);
             Q_out.push(0x00);
             have_faultlog = 1;
+            //mqtt.publish("Spa/debug/have_faultlog", "requesting fault log, #1");
+          } else if ((have_filtersettings == 0) && (have_faultlog == 2)) { // Get the filter cycles log once we have the faultlog
+            Q_out.push(id);
+            Q_out.push(0xBF);
+            Q_out.push(0x22);
+            Q_out.push(0x01);
+            Q_out.push(0x00);
+            Q_out.push(0x00);
+            //mqtt.publish("Spa/debug/have_faultlog", "requesting filter settings, #1");
+            have_filtersettings = 1;
           } else {
             // A Nothing to Send message is sent by a client immediately after a Clear to Send message if the client has no messages to send.
             Q_out.push(id);
@@ -799,6 +854,11 @@ void loop() {
     } else if (Q_in[2] == 0xFF && Q_in[4] == 0x13) { // FF AF 13:Status Update - Packet index offset 5
       if (last_state_crc != Q_in[Q_in[1]]) {
         decodeState();
+      }
+    } else if (Q_in[2] == id && Q_in[4] == 0x23) { // FF AF 23:Filter Cycle Message - Packet index offset 5
+      if (last_state_crc != Q_in[Q_in[1]]) {
+        //mqtt.publish("Spa/debug/have_faultlog", "decoding filter settings");
+        decodeFilterSettings();
       }
     } else {
       // DEBUG for finding meaning
