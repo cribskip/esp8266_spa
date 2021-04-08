@@ -40,6 +40,8 @@ String BROKER_PASS = "";
 //HomeAssistant autodiscover
 #define HASSIO true
 
+#define PRODUCTION true
+
 #define TX485 D1  //find a way to skip this
 #define RLY1  D7
 #define RLY2  D8
@@ -123,13 +125,13 @@ struct {
 struct {
   uint8_t filt1Hour :5;
   uint8_t filt1Minute :6;
-  uint8_t filt1DuractionHour :5;
-  uint8_t filt1DuractionMinute :6;
+  uint8_t filt1DurationHour :5;
+  uint8_t filt1DurationMinute :6;
   uint8_t filt2Enable :1;
   uint8_t filt2Hour :5;
   uint8_t filt2Minute :6;
-  uint8_t filt2DuractionHour :5;
-  uint8_t filt2DuractionMinute :6;
+  uint8_t filt2DurationHour :5;
+  uint8_t filt2DurationMinute :6;
 
 } SpaFilterSettings;
 
@@ -233,25 +235,59 @@ void decodeFault() {
 }
 
 void decodeFilterSettings() {
+  String s;
+  String d;
+  String payld;
+
   SpaFilterSettings.filt1Hour = Q_in[5];
   SpaFilterSettings.filt1Minute = Q_in[6];
-  SpaFilterSettings.filt1DuractionHour = Q_in[7];
-  SpaFilterSettings.filt1DuractionMinute = Q_in[8];
-  SpaFilterSettings.filt2Enable = Q_in[9] >> 7; // check
+  SpaFilterSettings.filt1DurationHour = Q_in[7];
+  SpaFilterSettings.filt1DurationMinute = Q_in[8];
+  SpaFilterSettings.filt2Enable = bitRead(Q_in[9],7); // check
   SpaFilterSettings.filt2Hour = Q_in[9] ^ (SpaFilterSettings.filt2Enable << 7); // check
   SpaFilterSettings.filt2Minute = Q_in[10];
-  SpaFilterSettings.filt2DuractionHour = Q_in[11];
-  SpaFilterSettings.filt2DuractionMinute = Q_in[12];
+  SpaFilterSettings.filt2DurationHour = Q_in[11];
+  SpaFilterSettings.filt2DurationMinute = Q_in[12];
   //MQTT stuff
-  mqtt.publish("Spa/config/filt1Hour", String(SpaFilterSettings.filt1Hour).c_str());
+  /*mqtt.publish("Spa/config/filt1Hour", String(SpaFilterSettings.filt1Hour).c_str());
   mqtt.publish("Spa/config/filt1Minute", String(SpaFilterSettings.filt1Minute).c_str());
-  mqtt.publish("Spa/config/filt1DuractionHour", String(SpaFilterSettings.filt1DuractionHour).c_str());
-  mqtt.publish("Spa/config/filt1DuractionMinute", String(SpaFilterSettings.filt1DuractionMinute).c_str());
+  mqtt.publish("Spa/config/filt1DurationHour", String(SpaFilterSettings.filt1DurationHour).c_str());
+  mqtt.publish("Spa/config/filt1DurationMinute", String(SpaFilterSettings.filt1DurationMinute).c_str());
   mqtt.publish("Spa/config/filt2Hour", String(SpaFilterSettings.filt2Hour).c_str());
   mqtt.publish("Spa/config/filt2Minute", String(SpaFilterSettings.filt2Minute).c_str());
-  mqtt.publish("Spa/config/filt2DuractionHour", String(SpaFilterSettings.filt2DuractionHour).c_str());
-  mqtt.publish("Spa/config/filt2DuractionMinute", String(SpaFilterSettings.filt2DuractionMinute).c_str());
-  mqtt.publish("Spa/config/filt2Enable", String(SpaFilterSettings.filt2Enable).c_str());
+  mqtt.publish("Spa/config/filt2DurationHour", String(SpaFilterSettings.filt2DurationHour).c_str());
+  mqtt.publish("Spa/config/filt2DurationMinute", String(SpaFilterSettings.filt2DurationMinute).c_str());
+  mqtt.publish("Spa/config/filt2Enable", String(SpaFilterSettings.filt2Enable).c_str());*/
+
+  //Filter 1 time conversion
+  if (SpaFilterSettings.filt1Hour < 10) s = "0"; else s = "";
+  s = String(SpaFilterSettings.filt1Hour) + ":";
+  if (SpaFilterSettings.filt1Minute < 10) s += "0";
+  s += String(SpaFilterSettings.filt1Minute);
+
+  if (SpaFilterSettings.filt1DurationHour < 10) d = "0"; else d = "";
+  d = String(SpaFilterSettings.filt1DurationHour) + ":";
+  if (SpaFilterSettings.filt1DurationMinute < 10) d += "0";
+  d += String(SpaFilterSettings.filt1DurationMinute);
+
+  payld = "{\"start\":\""+s+"\",\"duration\":\""+d+"\"}";
+  mqtt.publish("Spa/filter1/state", payld.c_str());
+
+  //Filter 2 time conversion
+  if (SpaFilterSettings.filt2Hour < 10) s = "0"; else s = "";
+  s += String(SpaFilterSettings.filt2Hour) + ":";
+  if (SpaFilterSettings.filt2Minute < 10) s += "0";
+  s += String(SpaFilterSettings.filt2Minute);
+
+  if (SpaFilterSettings.filt2DurationHour < 10) d = "0"; else d = "";
+  d += String(SpaFilterSettings.filt2DurationHour) + ":";
+  if (SpaFilterSettings.filt2DurationMinute < 10) d += "0";
+  d += String(SpaFilterSettings.filt2DurationMinute);
+  if ((int)(SpaFilterSettings.filt2Enable) == 1) mqtt.publish("Spa/filter2_enabled/state", STRON); else mqtt.publish("Spa/filter2_enabled/state", STROFF);
+
+
+  payld = "{\"start\":\""+s+"\",\"duration\":\""+d+"\"}";
+  mqtt.publish("Spa/filter2/state", payld.c_str());
 
   have_filtersettings = 2;
 }
@@ -318,7 +354,7 @@ void decodeState() {
   // 8:Flag Byte 3 Hour & 9:Flag Byte 4 Minute => Time
   if (Q_in[8] < 10) s = "0"; else s = "";
   SpaState.hour = Q_in[8];
-  s = String(Q_in[8]) + ":";
+  s += String(Q_in[8]) + ":";
   if (Q_in[9] < 10) s += "0";
   s += String(Q_in[9]);
   SpaState.minutes = Q_in[9];
@@ -463,6 +499,11 @@ void mqttpubsub() {
         mqtt.publish("homeassistant/switch/Spa/blower/config", "{\"name\":\"Hot tub blower\",\"uniq_id\":\"ESP82Spa_10\",\"cmd_t\":\"Spa/blower/set\",\"stat_t\":\"Spa/blower/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
       }
 
+      mqtt.publish("homeassistant/sensor/Spa/filter1_start/config", "{\"name\":\"Filter 1 start\",\"val_tpl\": \"{{value_json.start}}\",\"uniq_id\":\"ESP82Spa_11\",\"stat_t\":\"Spa/filter1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/sensor/Spa/filter2_start/config", "{\"name\":\"Filter 2 start\",\"val_tpl\": \"{{value_json.start}}\",\"uniq_id\":\"ESP82Spa_12\",\"stat_t\":\"Spa/filter2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/sensor/Spa/filter1_duration/config", "{\"name\":\"Filter 1 duration\",\"val_tpl\": \"{{value_json.duration}}\",\"uniq_id\":\"ESP82Spa_13\",\"stat_t\":\"Spa/filter1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/sensor/Spa/filter2_duration/config", "{\"name\":\"Filter 2 duration\",\"val_tpl\": \"{{value_json.duration}}\",\"uniq_id\":\"ESP82Spa_14\",\"stat_t\":\"Spa/filter2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/binary_sensor/Spa/filter2_enabled/config", "{\"name\":\"Filter 2 enabled\",\"uniq_id\":\"ESP82Spa_15\",\"stat_t\":\"Spa/filter2_enabled/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
   }
 
   mqtt.publish("Spa/node/state", "ON");
@@ -741,7 +782,7 @@ void loop() {
   }
 
   //Every x minutes, read the fault log and filter settings using SpaState,minutes
-  if (SpaState.minutes % 5 == 0)
+  if ((int)(SpaState.minutes % 5) == 0)
   {
     //logic to only get the error message once -> this is dirty
     //have_faultlog = 0;
@@ -873,6 +914,8 @@ void loop() {
 
   // Long time no receive
   if (millis() - lastrx > 5000) {
-    hardreset();
+    if (PRODUCTION) {
+      hardreset();
+    }
   }
 }
