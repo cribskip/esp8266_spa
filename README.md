@@ -25,7 +25,7 @@ Bonus: you may add several relays or such like I did ;-)
 # Parts
 - Get a esp8266, perferable a Wemos D1 Pro in case you need to attach a seperate antenna
 - RS485 bus transceiver, (for example the "ARCELI TTL To RS485 Adapter 485 Serial Port UART Level Converter Module 3.3V 5V")
-- A DC-DC converter for powering from the Tub (MT3608 for example)
+- A DC-DC converter for powering from the Tub (LM2596 for example)
 - breadboard, wire etc...
 
 
