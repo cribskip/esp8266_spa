@@ -6,13 +6,12 @@
 // PubSubClient
 
 // TODO:
-// HomeAssistant autodiscover - mostly done
-// Configuration handling
-// Proper states (rather than just ON/OFF)
-// OTA update from Firebase
-// Settings
-// Implement Existing Client Request/Response
-// Handle non-CTS Client IDs
+// HomeAssistant autodiscover - DONE
+// Configuration handling -> DONE
+// Proper states (rather than just ON/OFF) -> NOT SURE HOW TO SOLVE THIS
+// OTA update from Firebase -> TO DO
+// ARDUINOOTA -> DOESN'T WORK YET -> SOMETHING WRONG WITH MDNS
+// STA Mode to configure wifi -> WIP
 
 // +12V RED
 // GND  BLACK
@@ -20,10 +19,17 @@
 // B    WHITE
 #include <LittleFS.h>
 #include <ArduinoJson.h>
+#include <ESP8266WiFi.h>
+#include <CircularBuffer.h>
+#include <ESP8266WebServer.h>   // Local WebServer used to serve the configuration portal
+#include <ESP8266mDNS.h>
+#include <ESP8266HTTPUpdateServer.h>
+#include <ArduinoOTA.h>
+#include <PubSubClient.h>
 
 
 
-#define VERSION "0.35"
+#define VERSION "0.37"
 String WIFI_SSID = "";
 String WIFI_PASSWORD = "";
 String BROKER = "";
@@ -32,31 +38,23 @@ String BROKER_PASS = "";
 #define AUTO_TX true //if your chip needs to pull D1 high/low set this to false
 #define SAVE_CONN false //save the ip details above to local filesystem
 
-
-
 #define STRON String("ON").c_str()
 #define STROFF String("OFF").c_str()
 
 //HomeAssistant autodiscover
 #define HASSIO true
+#define PRODUCTION true
 
 #define TX485 D1  //find a way to skip this
 #define RLY1  D7
 #define RLY2  D8
 
-#include <ESP8266WiFi.h>
-#include <CircularBuffer.h>
+
 CircularBuffer<uint8_t, 35> Q_in;
 CircularBuffer<uint8_t, 35> Q_out;
 
-#include <ESP8266WebServer.h>   // Local WebServer used to serve the configuration portal
-#include <ESP8266mDNS.h>
-#include <ESP8266HTTPUpdateServer.h>
-#include <ArduinoOTA.h>
 ESP8266WebServer httpServer(80);
 ESP8266HTTPUpdateServer httpUpdater;
-
-#include <PubSubClient.h>       // MQTT client
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
@@ -64,21 +62,19 @@ extern uint8_t crc8();
 extern void ID_request();
 extern void ID_ack();
 extern void rs485_send();
-
-
 uint8_t x, i, j;
-
 uint8_t last_state_crc = 0x00;
 uint8_t send = 0x00;
 uint8_t settemp = 0x00;
 uint8_t id = 0x00;
-
 unsigned long lastrx = 0;
-
 char have_config = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char have_faultlog = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
-char faultlog_minutes = 0; //temp logic so we only get the fault log once per 5 minutes
+char have_filtersettings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char ip_settings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
+char wifi_settings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
+char faultlog_minutes = 0; //temp logic so we only get the fault log once per 5 minutes
+char filtersettings_minutes = 0; //temp logic so we only get the filter settings once per 5 minutes
 
 struct {
   uint8_t jet1 :1;
@@ -118,10 +114,25 @@ struct {
   uint8_t minutes :6;
 } SpaFaultLog;
 
+struct {
+  uint8_t filt1Hour :5;
+  uint8_t filt1Minute :6;
+  uint8_t filt1DurationHour :5;
+  uint8_t filt1DurationMinute :6;
+  uint8_t filt2Enable :1;
+  uint8_t filt2Hour :5;
+  uint8_t filt2Minute :6;
+  uint8_t filt2DurationHour :5;
+  uint8_t filt2DurationMinute :6;
+
+} SpaFilterSettings;
+
 void _yield() {
   yield();
   mqtt.loop();
   httpServer.handleClient();
+  MDNS.update();
+  ArduinoOTA.handle();
 }
 
 void print_msg(CircularBuffer<uint8_t, 35> &data) {
@@ -214,6 +225,65 @@ void decodeFault() {
   mqtt.publish("Spa/fault/Hours", String(SpaFaultLog.hour).c_str());
   mqtt.publish("Spa/fault/Minutes", String(SpaFaultLog.minutes).c_str());
   have_faultlog = 2;
+  //mqtt.publish("Spa/debug/have_faultlog", "have the faultlog, #2");
+}
+
+void decodeFilterSettings() {
+  String s;
+  String d;
+  String payld;
+
+  SpaFilterSettings.filt1Hour = Q_in[5];
+  SpaFilterSettings.filt1Minute = Q_in[6];
+  SpaFilterSettings.filt1DurationHour = Q_in[7];
+  SpaFilterSettings.filt1DurationMinute = Q_in[8];
+  SpaFilterSettings.filt2Enable = bitRead(Q_in[9],7); // check
+  SpaFilterSettings.filt2Hour = Q_in[9] ^ (SpaFilterSettings.filt2Enable << 7); // check
+  SpaFilterSettings.filt2Minute = Q_in[10];
+  SpaFilterSettings.filt2DurationHour = Q_in[11];
+  SpaFilterSettings.filt2DurationMinute = Q_in[12];
+  //MQTT stuff
+  /*mqtt.publish("Spa/config/filt1Hour", String(SpaFilterSettings.filt1Hour).c_str());
+  mqtt.publish("Spa/config/filt1Minute", String(SpaFilterSettings.filt1Minute).c_str());
+  mqtt.publish("Spa/config/filt1DurationHour", String(SpaFilterSettings.filt1DurationHour).c_str());
+  mqtt.publish("Spa/config/filt1DurationMinute", String(SpaFilterSettings.filt1DurationMinute).c_str());
+  mqtt.publish("Spa/config/filt2Hour", String(SpaFilterSettings.filt2Hour).c_str());
+  mqtt.publish("Spa/config/filt2Minute", String(SpaFilterSettings.filt2Minute).c_str());
+  mqtt.publish("Spa/config/filt2DurationHour", String(SpaFilterSettings.filt2DurationHour).c_str());
+  mqtt.publish("Spa/config/filt2DurationMinute", String(SpaFilterSettings.filt2DurationMinute).c_str());
+  mqtt.publish("Spa/config/filt2Enable", String(SpaFilterSettings.filt2Enable).c_str());*/
+
+  //Filter 1 time conversion
+  if (SpaFilterSettings.filt1Hour < 10) s = "0"; else s = "";
+  s = String(SpaFilterSettings.filt1Hour) + ":";
+  if (SpaFilterSettings.filt1Minute < 10) s += "0";
+  s += String(SpaFilterSettings.filt1Minute);
+
+  if (SpaFilterSettings.filt1DurationHour < 10) d = "0"; else d = "";
+  d = String(SpaFilterSettings.filt1DurationHour) + ":";
+  if (SpaFilterSettings.filt1DurationMinute < 10) d += "0";
+  d += String(SpaFilterSettings.filt1DurationMinute);
+
+  payld = "{\"start\":\""+s+"\",\"duration\":\""+d+"\"}";
+  mqtt.publish("Spa/filter1/state", payld.c_str());
+
+  //Filter 2 time conversion
+  if (SpaFilterSettings.filt2Hour < 10) s = "0"; else s = "";
+  s += String(SpaFilterSettings.filt2Hour) + ":";
+  if (SpaFilterSettings.filt2Minute < 10) s += "0";
+  s += String(SpaFilterSettings.filt2Minute);
+
+  if (SpaFilterSettings.filt2DurationHour < 10) d = "0"; else d = "";
+  d += String(SpaFilterSettings.filt2DurationHour) + ":";
+  if (SpaFilterSettings.filt2DurationMinute < 10) d += "0";
+  d += String(SpaFilterSettings.filt2DurationMinute);
+  if ((int)(SpaFilterSettings.filt2Enable) == 1) mqtt.publish("Spa/filter2_enabled/state", STRON); else mqtt.publish("Spa/filter2_enabled/state", STROFF);
+
+
+  payld = "{\"start\":\""+s+"\",\"duration\":\""+d+"\"}";
+  mqtt.publish("Spa/filter2/state", payld.c_str());
+
+  have_filtersettings = 2;
 }
 
 void decodeSettings() {
@@ -278,7 +348,7 @@ void decodeState() {
   // 8:Flag Byte 3 Hour & 9:Flag Byte 4 Minute => Time
   if (Q_in[8] < 10) s = "0"; else s = "";
   SpaState.hour = Q_in[8];
-  s = String(Q_in[8]) + ":";
+  s += String(Q_in[8]) + ":";
   if (Q_in[9] < 10) s += "0";
   s += String(Q_in[9]);
   SpaState.minutes = Q_in[9];
@@ -387,10 +457,6 @@ void mqttpubsub() {
       //temperature -> can we try and remove the Payload below, it's messy
       Payload = "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/node/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\""+String(VERSION)+"\"}}";
       mqtt.publish("homeassistant/binary_sensor/Spa/state/config", Payload.c_str());
-      //temperature
-      //mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\",\"uniq_id\":\"ESP82Spa_2\",\"stat_t\":\"Spa/temperature/state\",\"unit_of_meas\":\"°C\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-      //target_temperature
-      //mqtt.publish("homeassistant/switch/Spa/target_temp/config", "{\"name\":\"Hot tub target temperature\",\"cmd_t\":\"Spa/target_temp/set\",\"stat_t\":\"Spa/target_temp/state\",\"unit_of_measurement\":\"°C\"}");
       //climate temperature
       mqtt.publish("homeassistant/climate/Spa/temperature/config", "{\"name\":\"Hot tub thermostat\",\"uniq_id\":\"ESP82Spa_0\",\"temp_cmd_t\":\"Spa/target_temp/set\",\"mode_cmd_t\":\"Spa/heat_mode/set\",\"mode_stat_t\":\"Spa/heat_mode/state\",\"curr_temp_t\":\"Spa/temperature/state\",\"temp_stat_t\":\"Spa/target_temp/state\",\"min_temp\":\"27\",\"max_temp\":\"40\",\"modes\":[\"off\", \"heat\"], \"temp_step\":\"0.5\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
       //heat mode
@@ -423,6 +489,11 @@ void mqttpubsub() {
         mqtt.publish("homeassistant/switch/Spa/blower/config", "{\"name\":\"Hot tub blower\",\"uniq_id\":\"ESP82Spa_10\",\"cmd_t\":\"Spa/blower/set\",\"stat_t\":\"Spa/blower/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
       }
 
+      mqtt.publish("homeassistant/sensor/Spa/filter1_start/config", "{\"name\":\"Filter 1 start\",\"val_tpl\": \"{{value_json.start}}\",\"uniq_id\":\"ESP82Spa_11\",\"stat_t\":\"Spa/filter1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/sensor/Spa/filter2_start/config", "{\"name\":\"Filter 2 start\",\"val_tpl\": \"{{value_json.start}}\",\"uniq_id\":\"ESP82Spa_12\",\"stat_t\":\"Spa/filter2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/sensor/Spa/filter1_duration/config", "{\"name\":\"Filter 1 duration\",\"val_tpl\": \"{{value_json.duration}}\",\"uniq_id\":\"ESP82Spa_13\",\"stat_t\":\"Spa/filter1/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/sensor/Spa/filter2_duration/config", "{\"name\":\"Filter 2 duration\",\"val_tpl\": \"{{value_json.duration}}\",\"uniq_id\":\"ESP82Spa_14\",\"stat_t\":\"Spa/filter2/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      mqtt.publish("homeassistant/binary_sensor/Spa/filter2_enabled/config", "{\"name\":\"Filter 2 enabled\",\"uniq_id\":\"ESP82Spa_15\",\"stat_t\":\"Spa/filter2_enabled/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
   }
 
   mqtt.publish("Spa/node/state", "ON");
@@ -477,8 +548,10 @@ void reconnect() {
     }
     else {
       //connection =
-      mqtt.connect("Spa1", BROKER_LOGIN.c_str(), BROKER_PASS.c_str());
+      mqtt.connect(String(String("Spa") + String(millis())).c_str(), BROKER_LOGIN.c_str(), BROKER_PASS.c_str());
     }
+    //time to connect
+    delay(1000);
 
     if (have_config == 3) {
       have_config = 2; // we have disconnected, let's republish our configuration
@@ -561,6 +634,8 @@ void setup() {
   //jsonSettings["BROKER_LOGIN"] = "";
   //jsonSettings["BROKER_PASS"] = "";
 
+  ArduinoOTA.begin();
+
   String error_msg = "";
 
   //if (LittleFS.format()){
@@ -599,6 +674,10 @@ void setup() {
     File file = LittleFS.open("/ip.txt", "r");
     if (!file) {
       error_msg = "could not open file for reading";
+      // STA LOGIC HERE
+      wifi_settings = 1;
+
+
     } else {
       deserializeJson(jsonSettings, file);
       //Filesystem methods assuming it all went well
@@ -618,9 +697,6 @@ void setup() {
 } else {
   error_msg = "Could not mount fs";
 }
-//} else {
-//  error_msg = "count not format fs";
-//}
 
   LittleFS.end();
 
@@ -661,18 +737,23 @@ void setup() {
 
   // Reset because of no connection
   if (WiFi.status() != WL_CONNECTED) {
+    // STA LOGIC HERE
+    wifi_settings = 1;
+
+    // SAVE WIFI SETTINGS TO FILESYSTEM
     hardreset();
   }
 
   httpUpdater.setup(&httpServer, "admin", "");
   httpServer.begin();
-  MDNS.begin("Spa");
-  MDNS.addService("http", "tcp", 80);
 
   mqtt.setServer(BROKER.c_str(), 1883);
   mqtt.setCallback(callback);
   mqtt.setKeepAlive(10);
   mqtt.setSocketTimeout(20);
+
+  MDNS.begin("spa");
+  MDNS.addService("http", "tcp", 80);
 
   /*the below is for debug purposes
   mqtt.connect("Spa1", BROKER_LOGIN.c_str(), BROKER_PASS.c_str());
@@ -703,8 +784,8 @@ void loop() {
     lastrx = millis();
   }
 
-  //Every x minutes, read the fault log using SpaState,minutes
-  if (SpaState.minutes % 5 == 0)
+  //Every x minutes, read the fault log and filter settings using SpaState,minutes
+  if ((int)(SpaState.minutes % 5) == 0)
   {
     //logic to only get the error message once -> this is dirty
     //have_faultlog = 0;
@@ -714,6 +795,14 @@ void loop() {
       else {
         faultlog_minutes = SpaState.minutes;
         have_faultlog = 0;
+      }
+    }
+    if (have_filtersettings == 2) { // we got the filter cycles before and treated it
+      if (filtersettings_minutes == SpaState.minutes) { // we got the filter cycles this interval so do nothing
+      }
+      else {
+        filtersettings_minutes = SpaState.minutes;
+        have_filtersettings = 0;
       }
     }
   }
@@ -771,6 +860,16 @@ void loop() {
             Q_out.push(0xFF);
             Q_out.push(0x00);
             have_faultlog = 1;
+            //mqtt.publish("Spa/debug/have_faultlog", "requesting fault log, #1");
+          } else if ((have_filtersettings == 0) && (have_faultlog == 2)) { // Get the filter cycles log once we have the faultlog
+            Q_out.push(id);
+            Q_out.push(0xBF);
+            Q_out.push(0x22);
+            Q_out.push(0x01);
+            Q_out.push(0x00);
+            Q_out.push(0x00);
+            //mqtt.publish("Spa/debug/have_faultlog", "requesting filter settings, #1");
+            have_filtersettings = 1;
           } else {
             // A Nothing to Send message is sent by a client immediately after a Clear to Send message if the client has no messages to send.
             Q_out.push(id);
@@ -800,6 +899,11 @@ void loop() {
       if (last_state_crc != Q_in[Q_in[1]]) {
         decodeState();
       }
+    } else if (Q_in[2] == id && Q_in[4] == 0x23) { // FF AF 23:Filter Cycle Message - Packet index offset 5
+      if (last_state_crc != Q_in[Q_in[1]]) {
+        //mqtt.publish("Spa/debug/have_faultlog", "decoding filter settings");
+        decodeFilterSettings();
+      }
     } else {
       // DEBUG for finding meaning
       //if (Q_in[2] & 0xFE || Q_in[2] == id)
@@ -813,6 +917,8 @@ void loop() {
 
   // Long time no receive
   if (millis() - lastrx > 5000) {
-    hardreset();
+    if (PRODUCTION) {
+      hardreset();
+    }
   }
 }
