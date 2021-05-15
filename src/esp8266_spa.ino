@@ -6,13 +6,12 @@
 // PubSubClient
 
 // TODO:
-// HomeAssistant autodiscover - mostly done
-// Configuration handling
-// Proper states (rather than just ON/OFF)
-// OTA update from Firebase
-// Settings
-// Implement Existing Client Request/Response
-// Handle non-CTS Client IDs
+// HomeAssistant autodiscover - DONE
+// Configuration handling -> DONE
+// Proper states (rather than just ON/OFF) -> NOT SURE HOW TO SOLVE THIS
+// OTA update from Firebase -> TO DO
+// ARDUINOOTA -> DOESN'T WORK YET -> SOMETHING WRONG WITH MDNS
+// STA Mode to configure wifi -> WIP
 
 // +12V RED
 // GND  BLACK
@@ -20,10 +19,17 @@
 // B    WHITE
 #include <LittleFS.h>
 #include <ArduinoJson.h>
+#include <ESP8266WiFi.h>
+#include <CircularBuffer.h>
+#include <ESP8266WebServer.h>   // Local WebServer used to serve the configuration portal
+#include <ESP8266mDNS.h>
+#include <ESP8266HTTPUpdateServer.h>
+#include <ArduinoOTA.h>
+#include <PubSubClient.h>
 
 
 
-#define VERSION "0.36"
+#define VERSION "0.37"
 String WIFI_SSID = "";
 String WIFI_PASSWORD = "";
 String BROKER = "";
@@ -32,33 +38,23 @@ String BROKER_PASS = "";
 #define AUTO_TX true //if your chip needs to pull D1 high/low set this to false
 #define SAVE_CONN false //save the ip details above to local filesystem
 
-
-
 #define STRON String("ON").c_str()
 #define STROFF String("OFF").c_str()
 
 //HomeAssistant autodiscover
 #define HASSIO true
-
 #define PRODUCTION true
 
 #define TX485 D1  //find a way to skip this
 #define RLY1  D7
 #define RLY2  D8
 
-#include <ESP8266WiFi.h>
-#include <CircularBuffer.h>
+
 CircularBuffer<uint8_t, 35> Q_in;
 CircularBuffer<uint8_t, 35> Q_out;
 
-#include <ESP8266WebServer.h>   // Local WebServer used to serve the configuration portal
-#include <ESP8266mDNS.h>
-#include <ESP8266HTTPUpdateServer.h>
-#include <ArduinoOTA.h>
 ESP8266WebServer httpServer(80);
 ESP8266HTTPUpdateServer httpUpdater;
-
-#include <PubSubClient.h>       // MQTT client
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
@@ -66,21 +62,17 @@ extern uint8_t crc8();
 extern void ID_request();
 extern void ID_ack();
 extern void rs485_send();
-
-
 uint8_t x, i, j;
-
 uint8_t last_state_crc = 0x00;
 uint8_t send = 0x00;
 uint8_t settemp = 0x00;
 uint8_t id = 0x00;
-
 unsigned long lastrx = 0;
-
 char have_config = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char have_faultlog = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char have_filtersettings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char ip_settings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
+char wifi_settings = 0; //stages: 0-> want it; 1-> requested it; 2-> got it; 3-> further processed it
 char faultlog_minutes = 0; //temp logic so we only get the fault log once per 5 minutes
 char filtersettings_minutes = 0; //temp logic so we only get the filter settings once per 5 minutes
 
@@ -139,6 +131,8 @@ void _yield() {
   yield();
   mqtt.loop();
   httpServer.handleClient();
+  MDNS.update();
+  ArduinoOTA.handle();
 }
 
 void print_msg(CircularBuffer<uint8_t, 35> &data) {
@@ -463,10 +457,6 @@ void mqttpubsub() {
       //temperature -> can we try and remove the Payload below, it's messy
       Payload = "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/node/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\""+String(VERSION)+"\"}}";
       mqtt.publish("homeassistant/binary_sensor/Spa/state/config", Payload.c_str());
-      //temperature
-      //mqtt.publish("homeassistant/sensor/Spa/temperature/config", "{\"name\":\"Hot tub temperature\",\"uniq_id\":\"ESP82Spa_2\",\"stat_t\":\"Spa/temperature/state\",\"unit_of_meas\":\"°C\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
-      //target_temperature
-      //mqtt.publish("homeassistant/switch/Spa/target_temp/config", "{\"name\":\"Hot tub target temperature\",\"cmd_t\":\"Spa/target_temp/set\",\"stat_t\":\"Spa/target_temp/state\",\"unit_of_measurement\":\"°C\"}");
       //climate temperature
       mqtt.publish("homeassistant/climate/Spa/temperature/config", "{\"name\":\"Hot tub thermostat\",\"uniq_id\":\"ESP82Spa_0\",\"temp_cmd_t\":\"Spa/target_temp/set\",\"mode_cmd_t\":\"Spa/heat_mode/set\",\"mode_stat_t\":\"Spa/heat_mode/state\",\"curr_temp_t\":\"Spa/temperature/state\",\"temp_stat_t\":\"Spa/target_temp/state\",\"min_temp\":\"27\",\"max_temp\":\"40\",\"modes\":[\"off\", \"heat\"], \"temp_step\":\"0.5\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
       //heat mode
@@ -558,8 +548,10 @@ void reconnect() {
     }
     else {
       //connection =
-      mqtt.connect("Spa1", BROKER_LOGIN.c_str(), BROKER_PASS.c_str());
+      mqtt.connect(String(String("Spa") + String(millis())).c_str(), BROKER_LOGIN.c_str(), BROKER_PASS.c_str());
     }
+    //time to connect
+    delay(1000);
 
     if (have_config == 3) {
       have_config = 2; // we have disconnected, let's republish our configuration
@@ -642,6 +634,8 @@ void setup() {
   //jsonSettings["BROKER_LOGIN"] = "";
   //jsonSettings["BROKER_PASS"] = "";
 
+  ArduinoOTA.begin();
+
   String error_msg = "";
 
   //if (LittleFS.format()){
@@ -680,6 +674,10 @@ void setup() {
     File file = LittleFS.open("/ip.txt", "r");
     if (!file) {
       error_msg = "could not open file for reading";
+      // STA LOGIC HERE
+      wifi_settings = 1;
+
+
     } else {
       deserializeJson(jsonSettings, file);
       //Filesystem methods assuming it all went well
@@ -739,18 +737,23 @@ void setup() {
 
   // Reset because of no connection
   if (WiFi.status() != WL_CONNECTED) {
+    // STA LOGIC HERE
+    wifi_settings = 1;
+
+    // SAVE WIFI SETTINGS TO FILESYSTEM
     hardreset();
   }
 
   httpUpdater.setup(&httpServer, "admin", "");
   httpServer.begin();
-  MDNS.begin("Spa");
-  MDNS.addService("http", "tcp", 80);
 
   mqtt.setServer(BROKER.c_str(), 1883);
   mqtt.setCallback(callback);
   mqtt.setKeepAlive(10);
   mqtt.setSocketTimeout(20);
+
+  MDNS.begin("spa");
+  MDNS.addService("http", "tcp", 80);
 
   /*the below is for debug purposes
   mqtt.connect("Spa1", BROKER_LOGIN.c_str(), BROKER_PASS.c_str());
