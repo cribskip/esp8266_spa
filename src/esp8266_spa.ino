@@ -26,17 +26,19 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
+#include <ESP8266httpUpdate.h>
 
 
 
-#define VERSION "0.37"
-String WIFI_SSID = "";
-String WIFI_PASSWORD = "";
-String BROKER = "";
-String BROKER_LOGIN = "";
-String BROKER_PASS = "";
+#define VERSION "0.37.2"
+String NEXTVERSION = "http://github.com/EmmanuelLM/esp8266_spa/blob/master/firmware.0.37.3.bin";
+String WIFI_SSID = "beanwifi";
+String WIFI_PASSWORD = "RosieAndElisaBean1";
+String BROKER = "192.168.8.126";
+String BROKER_LOGIN = "mqtt";
+String BROKER_PASS = "13Cambridge!";
 #define AUTO_TX true //if your chip needs to pull D1 high/low set this to false
-#define SAVE_CONN false //save the ip details above to local filesystem
+#define SAVE_CONN true //save the ip details above to local filesystem
 
 #define STRON String("ON").c_str()
 #define STROFF String("OFF").c_str()
@@ -553,9 +555,10 @@ void reconnect() {
     //time to connect
     delay(1000);
 
-    if (have_config == 3) {
-      have_config = 2; // we have disconnected, let's republish our configuration
-    }
+    //if (have_config == 3) {
+      //have_config = 2; // we have disconnected, let's republish our configuration
+    mqttpubsub();
+    //}
 
   }
   mqtt.setBufferSize(512); //increase pubsubclient buffer size
@@ -623,6 +626,24 @@ void callback(char* p_topic, byte * p_payload, unsigned int p_length) {
     send = 0xff;
   }
 }
+
+/// UPDATE FILESYSTE
+void update_started() {
+  mqtt.publish("Spa/node/debug", "Updated started");
+}
+
+void update_finished() {
+  mqtt.publish("Spa/node/debug", "Updated finished");
+}
+
+void update_progress(int cur, int total) {
+  mqtt.publish("Spa/node/debug", "Update in progress");
+}
+
+void update_error(int err) {
+  mqtt.publish("Spa/node/debug", "Updated error");
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -774,17 +795,14 @@ void loop() {
   //httpServer.handleClient(); needed?
   _yield();
 
-  // Read from Spa RS485
-  if (Serial.available()) {
-    x = Serial.read();
-    Q_in.push(x);
+  /*
+  ESPhttpUpdate.onStart(update_started);
+  ESPhttpUpdate.onEnd(update_finished);
+  ESPhttpUpdate.onProgress(update_progress);
+  ESPhttpUpdate.onError(update_error);
+  */
 
-    // Drop until SOF is seen
-    if (Q_in.first() != 0x7E) Q_in.clear();
-    lastrx = millis();
-  }
-
-  //Every x minutes, read the fault log and filter settings using SpaState,minutes
+  //Every x minutes, read the fault log and filter settings using SpaState,minutes, and check for updates
   if ((int)(SpaState.minutes % 5) == 0)
   {
     //logic to only get the error message once -> this is dirty
@@ -805,9 +823,37 @@ void loop() {
         have_filtersettings = 0;
       }
     }
+
+    //perform binary updates
+    /*
+    WiFiClient wifiClient2;
+    t_httpUpdate_return ret = ESPhttpUpdate.update(wifiClient2, NEXTVERSION);
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        mqtt.publish("Spa/node/debug", "Update failed");
+        break;
+
+      case HTTP_UPDATE_NO_UPDATES:
+        mqtt.publish("Spa/node/debug", "No update");
+        break;
+
+      case HTTP_UPDATE_OK:
+        mqtt.publish("Spa/node/debug", "Update ok");
+        break;
+    }*/
+
   }
 
   // DEBUG:mqtt.publish("Spa/rcv", String(x).c_str()); _yield();
+  // Read from Spa RS485
+  if (Serial.available()) {
+    x = Serial.read();
+    Q_in.push(x);
+
+    // Drop until SOF is seen
+    if (Q_in.first() != 0x7E) Q_in.clear();
+    lastrx = millis();
+  }
 
   // Double SOF-marker, drop last one
   if (Q_in[1] == 0x7E && Q_in.size() > 1) Q_in.pop();
@@ -916,7 +962,7 @@ void loop() {
   }
 
   // Long time no receive
-  if (millis() - lastrx > 5000) {
+  if (millis() - lastrx > 10000) {
     if (PRODUCTION) {
       hardreset();
     }
