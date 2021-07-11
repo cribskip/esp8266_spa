@@ -30,8 +30,8 @@
 
 
 
-#define VERSION "0.37.2"
-String NEXTVERSION = "http://github.com/EmmanuelLM/esp8266_spa/blob/master/firmware.0.37.3.bin";
+#define VERSION "0.37.3"
+String NEXTVERSION = "http://github.com/EmmanuelLM/esp8266_spa/blob/master/firmware.0.37.4.bin";
 String WIFI_SSID = "beanwifi";
 String WIFI_PASSWORD = "RosieAndElisaBean1";
 String BROKER = "192.168.8.126";
@@ -79,8 +79,8 @@ char faultlog_minutes = 0; //temp logic so we only get the fault log once per 5 
 char filtersettings_minutes = 0; //temp logic so we only get the filter settings once per 5 minutes
 
 struct {
-  uint8_t jet1 :1;
-  uint8_t jet2 :1;
+  uint8_t jet1 :2;
+  uint8_t jet2 :2;
   uint8_t blower :1;
   uint8_t light :1;
   uint8_t restmode:1;
@@ -104,6 +104,7 @@ struct {
   uint8_t mister :1;
   uint8_t aux1 :1;
   uint8_t aux2 :1;
+  uint8_t temp_scale :1; //0 -> Farenheit, 1-> Celcius
 } SpaConfig;
 
 struct {
@@ -303,6 +304,7 @@ void decodeSettings() {
   SpaConfig.mister = ((Q_in[9] & 0x30) != 0);
   SpaConfig.aux1 = ((Q_in[9] & 0x01) != 0);
   SpaConfig.aux2 = ((Q_in[9] & 0x02) != 0);
+  SpaConfig.temp_scale = Q_in[3] & 0x01; //Read temperature scale - 0 -> Farenheit, 1-> Celcius
   mqtt.publish("Spa/config/pumps1", String(SpaConfig.pump1).c_str());
   mqtt.publish("Spa/config/pumps2", String(SpaConfig.pump2).c_str());
   mqtt.publish("Spa/config/pumps3", String(SpaConfig.pump3).c_str());
@@ -316,6 +318,7 @@ void decodeSettings() {
   mqtt.publish("Spa/config/mister", String(SpaConfig.mister).c_str());
   mqtt.publish("Spa/config/aux1", String(SpaConfig.aux1).c_str());
   mqtt.publish("Spa/config/aux2", String(SpaConfig.aux2).c_str());
+  mqtt.publish("Spa/config/temp_scale", String(SpaConfig.temp_scale).c_str());
   have_config = 2;
 }
 
@@ -328,14 +331,24 @@ void decodeState() {
   //print_msg(Q_in);
 
   // 25:Flag Byte 20 - Set Temperature
-  d = Q_in[25] / 2;
-  if (Q_in[25] % 2 == 1) d += 0.5;
+  if (SpaConfig.temp_scale == 0) {
+    d = Q_in[25];
+  } else if (SpaConfig.temp_scale == 1){
+    d = Q_in[25] / 2;
+    if (Q_in[25] % 2 == 1) d += 0.5;
+  }
+
   mqtt.publish("Spa/target_temp/state", String(d, 2).c_str());
 
   // 7:Flag Byte 2 - Actual temperature
   if (Q_in[7] != 0xFF) {
-    d = Q_in[7] / 2;
-    if (Q_in[7] % 2 == 1) d += 0.5;
+    if (SpaConfig.temp_scale == 0) {
+      d = Q_in[7];
+    } else if (SpaConfig.temp_scale == 1){
+      d = Q_in[7] / 2;
+      if (Q_in[7] % 2 == 1) d += 0.5;
+    }
+
     if (c > 0) {
       if ((d > c * 1.2) || (d < c * 0.8)) d = c; //remove spurious readings greater or less than 20% away from previous read
     }
@@ -460,7 +473,11 @@ void mqttpubsub() {
       Payload = "{\"name\":\"Hot tub status\",\"uniq_id\":\"ESP82Spa_1\",\"stat_t\":\"Spa/node/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"],\"name\":\"Esp Spa\",\"sw\":\""+String(VERSION)+"\"}}";
       mqtt.publish("homeassistant/binary_sensor/Spa/state/config", Payload.c_str());
       //climate temperature
-      mqtt.publish("homeassistant/climate/Spa/temperature/config", "{\"name\":\"Hot tub thermostat\",\"uniq_id\":\"ESP82Spa_0\",\"temp_cmd_t\":\"Spa/target_temp/set\",\"mode_cmd_t\":\"Spa/heat_mode/set\",\"mode_stat_t\":\"Spa/heat_mode/state\",\"curr_temp_t\":\"Spa/temperature/state\",\"temp_stat_t\":\"Spa/target_temp/state\",\"min_temp\":\"27\",\"max_temp\":\"40\",\"modes\":[\"off\", \"heat\"], \"temp_step\":\"0.5\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      if (SpaConfig.temp_scale == 0) {
+        mqtt.publish("homeassistant/climate/Spa/temperature/config", "{\"name\":\"Hot tub thermostat\",\"uniq_id\":\"ESP82Spa_0\",\"temp_cmd_t\":\"Spa/target_temp/set\",\"mode_cmd_t\":\"Spa/heat_mode/set\",\"mode_stat_t\":\"Spa/heat_mode/state\",\"temp_unit\": \"F\",\"curr_temp_t\":\"Spa/temperature/state\",\"temp_stat_t\":\"Spa/target_temp/state\",\"min_temp\":\"80\",\"max_temp\":\"105\",\"modes\":[\"off\", \"heat\"], \"temp_step\":\"1\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      } else if (SpaConfig.temp_scale == 1) {
+        mqtt.publish("homeassistant/climate/Spa/temperature/config", "{\"name\":\"Hot tub thermostat\",\"uniq_id\":\"ESP82Spa_0\",\"temp_cmd_t\":\"Spa/target_temp/set\",\"mode_cmd_t\":\"Spa/heat_mode/set\",\"mode_stat_t\":\"Spa/heat_mode/state\",\"temp_unit\": \"C\",\"curr_temp_t\":\"Spa/temperature/state\",\"temp_stat_t\":\"Spa/target_temp/state\",\"min_temp\":\"27\",\"max_temp\":\"40\",\"modes\":[\"off\", \"heat\"], \"temp_step\":\"0.5\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
+      }
       //heat mode
       mqtt.publish("homeassistant/switch/Spa/heatingmode/config", "{\"name\":\"Hot tub heating mode\",\"uniq_id\":\"ESP82Spa_3\",\"cmd_t\":\"Spa/heatingmode/set\",\"stat_t\":\"Spa/heatingmode/state\",\"platform\":\"mqtt\",\"dev\":{\"ids\":[\"ESP82Spa\"]}}");
       //heating state
@@ -555,10 +572,10 @@ void reconnect() {
     //time to connect
     delay(1000);
 
-    //if (have_config == 3) {
+    if (have_config == 3) {
       //have_config = 2; // we have disconnected, let's republish our configuration
-    mqttpubsub();
-    //}
+      mqttpubsub();
+    }
 
   }
   mqtt.setBufferSize(512); //increase pubsubclient buffer size
